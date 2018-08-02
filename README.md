@@ -1,4 +1,4 @@
-Thank you for downloaded Jeane Spline 1.0.5!
+Thank you for downloading Jeane Spline 1.0.5!
 
 Included in the Jeane Spline ZIP a PDF guide transcription of the video contents and the Jeane Spline 1.0.5 addon.
 
