@@ -1,5 +1,5 @@
-Thank you for downloading Jeane Spline 1.0.5!
+Thank you for downloading the experimental version of Jeane Spline 1.0.7!
 
-Included in the Jeane Spline ZIP a PDF guide transcription of the video contents and the Jeane Spline 1.0.5 addon.
+Included in the Jeane Spline ZIP is the experimental Jeane Spline 1.0.7 addon.
 
-Please see Jeane_Spline_1_0_5_Guide.pdf for a full written explanation of installation, use and two examples of how it can be applied to character animation.
+To install the addon, download the 1.0.7 branch from github as a zip and open it in blender 2.79 under user preferences/addons/install add-on from file.
