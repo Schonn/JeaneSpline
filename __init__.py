@@ -41,8 +41,8 @@ class JSPLINE_SpliningPanel(bpy.types.Panel):
     bpy.types.Scene.JSPLINETranslateAmount = bpy.props.FloatProperty(name="Effect Translation Influence",description="The influence that the translation delay effect will have on the selected bone",default=0.3,min=0,max=1)
     bpy.types.Scene.JSPLINENoiseAmplitude = bpy.props.FloatProperty(name="Effect Noise Amplitude",description="The amount of rotation and translation noise that will be added to the selected bone",default=0.1,min=0,max=5)
     bpy.types.Scene.JSPLINEPopulateInterval = bpy.props.IntProperty(name="Populate Keyframes Interval",description="The interval between Jeane Spline keyframes when populating the timeline with keyframes for the selected bone at a regular interval. Can be negative to populate backwards",default=3)
-    bpy.types.Scene.JSPLINERotationDelay = bpy.props.IntProperty(name="Rotation Delay Add",description="The number of additional keyframes to offset rotation by",default=0)
-    bpy.types.Scene.JSPLINETranslationDelay = bpy.props.IntProperty(name="Translation Delay Add",description="The number of additional keyframes to offset translation by",default=0)
+    bpy.types.Scene.JSPLINERotationDelay = bpy.props.IntProperty(name="Rotation Delay Add",description="The number of additional keyframes to offset rotation by",default=2)
+    bpy.types.Scene.JSPLINETranslationDelay = bpy.props.IntProperty(name="Translation Delay Add",description="The number of additional keyframes to offset translation by",default=1)
 
     def draw(self, context):
         self.layout.prop(context.scene,"JSPLINERotateAmount",slider=True)
@@ -193,7 +193,7 @@ class JSPLINEClearBone(bpy.types.Operator):
                 targetArmature = bpy.context.object
                 armatureFcurves = targetArmature.animation_data.action.fcurves
                 for targetFcurve in armatureFcurves:
-                    if("influence" in targetFcurve.data_path and "JSPLINE_" in targetFcurve.data_path):
+                    if("influence" in targetFcurve.data_path and "JSPLINE_" in targetFcurve.data_path and targetBone.name in targetFcurve.data_path):
                         armatureFcurves.remove(targetFcurve)
                 bpy.ops.object.select_all(action='DESELECT')
                 emptyNameTypes = [",RotateEffect",",TranslateEffect",",PoleEffect"]
@@ -235,7 +235,7 @@ class JSPLINESmoothBone(bpy.types.Operator):
                 elif(targetEmpty.name.find(",PoleEffect") != -1): 
                     frameInsertPosition = (bpy.context.scene.frame_current-1)+fcurve+bpy.context.scene.JSPLINERotationDelay
                 else:
-                    frameInsertPosition = ((bpy.context.scene.frame_current)+fcurve*2)+bpy.context.scene.JSPLINERotationDelay
+                    frameInsertPosition = ((bpy.context.scene.frame_current)+fcurve*1)+bpy.context.scene.JSPLINERotationDelay
                 targetEmpty.keyframe_insert(data_path="location",index=fcurve,frame=frameInsertPosition)
                 animationFcurves = targetEmpty.animation_data.action.fcurves[fcurve]
                 if(len(animationFcurves.modifiers) == 0):
@@ -291,7 +291,7 @@ class JSPLINESmoothBone(bpy.types.Operator):
                 self.createNamedEmpty(sceneObjects,emptyNameTypes[emptyName])
         delayEmptyObjects = [sceneObjects[emptyNameTypes[0]],sceneObjects[emptyNameTypes[1]],sceneObjects[emptyNameTypes[2]]]
         self.muteConstraints(True,targetBone)
-        self.positionOnBoneLocation(sceneObjects,delayEmptyObjects[0],targetArmature,targetBone,[0,targetBone.length*5,0],originalCurrentFrame) #rotate
+        self.positionOnBoneLocation(sceneObjects,delayEmptyObjects[0],targetArmature,targetBone,[0,targetBone.length*20,0],originalCurrentFrame) #rotate
         self.positionOnBoneLocation(sceneObjects,delayEmptyObjects[1],targetArmature,targetBone,[0,-targetBone.length,0],originalCurrentFrame) #translate
         self.positionOnBoneLocation(sceneObjects,delayEmptyObjects[2],targetArmature,targetBone,[targetBone.length*5,0,0],originalCurrentFrame) #pole
         self.addBoneConstraints(sceneObjects,targetBone,delayEmptyObjects[0],delayEmptyObjects[1],delayEmptyObjects[2]) #rotate, translate, pole
