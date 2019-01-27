@@ -1,5 +1,5 @@
-Thank you for downloading Jeane Spline 1.0.5!
+Thank you for downloading an experimental version of Jeane Spline 1.0.5 for Blender 2.8!
 
-Included in the Jeane Spline ZIP a PDF guide transcription of the video contents and the Jeane Spline 1.0.5 addon.
+Included in the Jeane Spline zip is the experimental Jeane Spline 1.0.5 for Blender 2.8 addon.
 
-Please see Jeane_Spline_1_0_5_Guide.pdf for a full written explanation of installation, use and two examples of how it can be applied to character animation.
+Although alternative and faster algorithms were tested for a 1.0.6 version of Jeane Spline, the process of baking has smoother results.
