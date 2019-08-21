@@ -1,4 +1,4 @@
-# Physics Puppet Blender Addon
+# Jeane Spline Animation Addon
 # Copyright (C) 2018 Pierre
 #
 # This program is free software: you can redistribute it and/or modify it under
