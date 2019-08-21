@@ -1,5 +1,5 @@
-# Physics Puppet Blender Addon
-# Copyright (C) 2018 Pierre
+# Empathy Blender Addon
+# Copyright (C) 2019 Pierre
 #
 # This program is free software: you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free Software
@@ -21,99 +21,103 @@ import mathutils
 
 #addon info read by Blender
 bl_info = {
-    "name": "Jeane Spline",
+    "name": "Empathy",
     "author": "Pierre",
-    "version": (1, 0, 5),
+    "version": (1, 0, 0),
     "blender": (2, 80, 0),
-    "description": "Animation Delay Effect",
+    "description": "create editable motion paths using bezier curves and apply delay effects",
     "category": "Animation"
     }
 
 
-#panel class for delay effect related menu items
-class JSPLINE_PT_SpliningPanel(bpy.types.Panel):
+#panel class for the empty motion path menu in object mode
+class EMPATHY_PT_MenuPanel(bpy.types.Panel):
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_label = 'Delay Effect'
+    bl_label = 'Delayed Motion Paths'
+    bl_context = 'objectmode'
+    bl_category = 'Empty Motion Path'
+    bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="how many frames to wait between capturing a location for a bezier curve motion path",default=5,min=1)
+    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.6,min=0)
+    bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="the closest that two points can be in a rotation bezier curve motion path",default=1.5,min=0)
+    bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="the closest that two points can be in a pole bezier curve motion path",default=1.5,min=0)
+    bpy.types.Scene.EMPATHYLoopedAnimation = bpy.props.BoolProperty(name="Loop Motion Path",description="make bezier curve motion path cyclic before smoothing for looping animation",default=False)
+
+    def draw(self, context):
+        self.layout.prop(context.scene,"EMPATHYLoopedAnimation")
+        self.layout.prop(context.scene,"EMPATHYCaptureInterval",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
+        self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
+        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
+
+#panel class for the empty motion path menu
+class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_label = 'Delayed Motion Paths'
     bl_context = 'posemode'
-    bl_category = 'Jeane Spline'
-    bpy.types.Scene.JSPLINERotateAmount = bpy.props.FloatProperty(name="Effect Rotation Influence",description="The influence that the rotation delay effect will have on the selected bone(s).",default=1,min=0,max=1)
-    bpy.types.Scene.JSPLINETranslateAmount = bpy.props.FloatProperty(name="Effect Translation Influence",description="The influence that the translation delay effect will have on the selected bone(s).",default=0.5,min=0,max=1)
-    bpy.types.Scene.JSPLINENoiseAmplitude = bpy.props.FloatProperty(name="Effect Noise Amplitude",description="The amount of rotation and translation noise that will be added to the selected bone(s).",default=0.1,min=0,max=5)
-    bpy.types.Scene.JSPLINELooped = bpy.props.BoolProperty(name="Seamless Looping Animation",description="Cut the animation to loop seamlessly in the current timeline region.",default=False)
+    bl_category = 'Empty Motion Path'
     
     def draw(self, context):
-        self.layout.prop(context.scene,"JSPLINELooped")
-        self.layout.prop(context.scene,"JSPLINERotateAmount",slider=True)
-        self.layout.prop(context.scene,"JSPLINETranslateAmount",slider=True)
-        self.layout.prop(context.scene,"JSPLINENoiseAmplitude",slider=True)
-        self.layout.operator('jspline.smoothbone', text ='Apply Effect To Selected Bone(s)')
-        self.layout.operator('jspline.revertbone', text ='Remove Effect From Selected Bone(s)')
-        self.layout.operator('jspline.keyinfluence', text ='Keyframe Influence For Selected Bone(s)')
-        self.layout.operator('jspline.keydisable', text ='Keyframe Disable For Selected Bone(s)')
-        self.layout.operator('jspline.resetdefault', text ='Reset Effect Settings To Default')        
+        self.layout.prop(context.scene,"EMPATHYLoopedAnimation")
+        self.layout.prop(context.scene,"EMPATHYCaptureInterval",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
+        self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
+        self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
+        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
 
-#button to reset Jeane Spline to default settings    
-class JSPLINE_OT_ResetDefaults(bpy.types.Operator):
-    bl_idname = "jspline.resetdefault"
-    bl_label = "Reset Effect Settings To Default Values"
-    bl_description = "Reset Rotation Influence, Translation Influence and Noise Amplitude sliders to their default values."
+#button to create a motion path for the objects and attach the objects to the motion paths
+class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
+    bl_idname = "empathy.clearobjectpaths"
+    bl_label = "Clear motion paths from selected objects"
+    bl_description = "Delete the bezier curves and empties which control the selected object"
+    
     def execute(self, context):
-        context.scene.JSPLINERotateAmount = 1 #set the rotate influence to full by default
-        context.scene.JSPLINETranslateAmount = 0.5 #reduce the amount of translation delay by default
-        context.scene.JSPLINENoiseAmplitude = 0.1 #reduce the amount of noise by default
+        #objects to remove path components from
+        
+        #for bones
+        objectsToClear = None
+        isUsingBones = False
+        activeArmature = None
+        if(bpy.context.active_object.mode == 'POSE'):
+            isUsingBones = True
+            objectsToClear = context.selected_pose_bones_from_active_object
+        else:
+            objectsToClear = context.selected_objects
+        
+        #delete associated objects
+        for pathedObject in objectsToClear:
+            #for bones
+            removableCollectionName = None
+            if(isUsingBones):
+                activeArmature = bpy.context.active_object
+                bpy.ops.object.posemode_toggle()
+                removableCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathedObject.name
+            else:
+                removableCollectionName = "EMPATHY_COMPONENTS_" + pathedObject.name
+            
+            if(removableCollectionName in bpy.data.collections):
+                targetObjectCollection = bpy.data.collections[removableCollectionName]
+                bpy.ops.object.select_all(action='DESELECT')
+                for markDeleteObject in targetObjectCollection.objects:
+                    markDeleteObject.select_set(True)
+                bpy.ops.object.delete(use_global = False, confirm = False)
+                bpy.data.collections.remove(targetObjectCollection)
+            for constraintToRemove in pathedObject.constraints:
+                if("EMPATHY_" in constraintToRemove.name):
+                    pathedObject.constraints.remove(constraintToRemove)
+                    
         return {'FINISHED'}
 
-#button to apply the delay effect to the selected bone(s)
-class JSPLINE_OT_SmoothBone(bpy.types.Operator):
-    bl_idname = "jspline.smoothbone"
-    bl_label = "Apply Delay To Selected Bone(s)"
-    bl_description = "Apply or update the delay effect on the selected bone(s) using the specified rotate and translate influence."
-    
-    #snap to a frame and create a keyframe based on the location of the object
-    def createKeyframeOnFrame(self,context,frameNumber,targetObject):
-        context.scene.frame_set(frameNumber)
-        bpy.ops.object.select_all(action='DESELECT')
-        targetObject.select_set(True)
-        context.view_layer.objects.active = targetObject
-        bpy.ops.anim.keyframe_insert_menu(type='Location')
-    
-    #delete frames in a given region
-    def deleteFramesRegion(self,context,frameFrom,frameTo,targetObject):
-        for frameNumber in range(frameFrom,frameTo):
-            targetObject.keyframe_delete(data_path="location",frame=frameNumber)
-            targetObject.keyframe_delete(data_path="rotation_quaternion",frame=frameNumber)
-            targetObject.keyframe_delete(data_path="scale",frame=frameNumber)
-            
-    #delete frames in a given region for bones
-    def deleteFramesRegionBones(self,context,frameFrom,frameTo,targetObject):
-        for frameNumber in range(frameFrom,frameTo):
-            targetObject.keyframe_delete(data_path="location",frame=frameNumber)
-            targetObject.keyframe_delete(data_path="rotation_quaternion",frame=frameNumber)
-    
-    #duplicate a location from one frame to another
-    def duplicateLocationFrameData(self,context,frameFrom,frameTo,targetObject):
-        context.scene.frame_set(frameFrom)
-        targetObject.keyframe_insert(data_path="location",frame=frameTo)
-    
-    #duplicate a rotation from one frame to another
-    def duplicateRotationFrameData(self,context,frameFrom,frameTo,targetObject):
-        context.scene.frame_set(frameFrom)
-        targetObject.keyframe_insert(data_path="rotation_quaternion",frame=frameTo)
-        
-    def delayFcurves(self,context,animationFcurves,delayFrames,keyFrame):
-        animationFcurves.keyframe_points[keyFrame].co.x += delayFrames
-        animationFcurves.keyframe_points[keyFrame].co.y += (animationFcurves.keyframe_points[keyFrame-1].co.y - animationFcurves.keyframe_points[keyFrame].co.y)
-        animationFcurves.update()
-    
-    def addFcurveNoise(self,context,animationFcurves,noiseStrength):
-        fcurvesNoise = animationFcurves.modifiers.new(type='NOISE')
-        fcurvesNoise.blend_type = "REPLACE"
-        fcurvesNoise.scale = random.randint(15,40)
-        fcurvesNoise.strength = noiseStrength
-        fcurvesNoise.phase = random.randint(1,100)
-        fcurvesNoise.offset = random.randint(1,30)
-        
+#button to create a motion path for the objects and attach the objects to the motion paths
+class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
+    bl_idname = "empathy.createobjectpaths"
+    bl_label = "Attach objects to motion paths"
+    bl_description = "Create bezier curves for the current objects and constrain the objects to move along the curves"
+
     def setupCollection(self,context,newCollectionName):
         if(newCollectionName not in bpy.data.collections.keys()):
             bpy.ops.collection.create(name=newCollectionName)
@@ -129,260 +133,286 @@ class JSPLINE_OT_SmoothBone(bpy.types.Operator):
                 bpy.context.scene.collection.objects.unlink(assignObject)
             else:
                 bpy.data.collections[context.collection.name].objects.unlink(assignObject)
+                
+    def setupBezierCurve(self,context,curveName):
+        bpy.ops.curve.primitive_bezier_curve_add(enter_editmode=True, location=(0,0,0))
+        bpy.ops.curve.select_all(action='DESELECT')
+        pathObject = bpy.context.object
+        pathObject.name = curveName
+        pathObject.data.splines[0].bezier_points[0].select_control_point = True
+        pathObject.show_in_front = True
+        bpy.ops.curve.delete(type='VERT')
+        bpy.ops.curve.select_all(action='SELECT')
+        return pathObject
+    
+    def computeCurveShape(self,context,captureInterval,minimumDistance,pathToEdit,pathingObject,loopAnimation):
+        context.scene.frame_set(context.scene.frame_start)
+        maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
+        for recordKeyFramePoint in range(0,maxKeyFrameNumber):
+            if(recordKeyFramePoint == maxKeyFrameNumber):
+                context.scene.frame_set(context.scene.frame_end)
+            elif(recordKeyFramePoint != 0):
+                context.scene.frame_set(context.scene.frame_current + captureInterval)
+            pathToEdit.data.splines[0].bezier_points[0].co = pathingObject.matrix_world.translation
+            if(recordKeyFramePoint != maxKeyFrameNumber):
+                bpy.ops.curve.extrude()
+                
+        bpy.ops.curve.select_all(action='DESELECT')
+        currentSpline = pathToEdit.data.splines[0]
+        #minimum distance for points to need to exist
+        pointDistanceMinimum = minimumDistance
+        #iterate through curve points and delete points which are too close
+        for curvePointNumber in range(len(currentSpline.bezier_points)):
+            pointDistanceTooSmall = False
+            if(curvePointNumber - 1 >= 0):
+                previousPointDistance = currentSpline.bezier_points[curvePointNumber].co - currentSpline.bezier_points[curvePointNumber - 1].co
+                distanceDifferenceValue = abs(previousPointDistance[0]) + abs(previousPointDistance[1]) + abs(previousPointDistance[2])
+                if(distanceDifferenceValue < pointDistanceMinimum):
+                    pointDistanceTooSmall = True
+            if(curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
+                nextPointDistance = currentSpline.bezier_points[curvePointNumber].co - currentSpline.bezier_points[curvePointNumber + 1].co
+                distanceDifferenceValue = abs(nextPointDistance[0]) + abs(nextPointDistance[1]) + abs(nextPointDistance[2])
+                if(distanceDifferenceValue < pointDistanceMinimum):
+                    pointDistanceTooSmall = True
+            #if the distance between points is too small, mark for deletion
+            if(pointDistanceTooSmall == True and curvePointNumber != 0):
+                currentSpline.bezier_points[curvePointNumber].select_control_point = True
+                currentSpline.bezier_points[curvePointNumber].select_left_handle = True
+                currentSpline.bezier_points[curvePointNumber].select_right_handle = True
+        #delete points which are too close
+        bpy.ops.curve.delete(type='VERT')
+
+        #iterate through curve points and correct shape
+        for curvePointNumber in range(len(currentSpline.bezier_points)):
+            pointLocation = currentSpline.bezier_points[curvePointNumber].co
+            currentSpline.bezier_points[curvePointNumber].handle_right = (pointLocation[0]+0.1,pointLocation[1],pointLocation[2])
+            currentSpline.bezier_points[curvePointNumber].handle_left = (pointLocation[0]-0.1,pointLocation[1],pointLocation[2])
+            bpy.ops.curve.select_all(action='DESELECT')
+            currentSpline.bezier_points[curvePointNumber].select_control_point = True
+            currentSpline.bezier_points[curvePointNumber].select_left_handle = True
+            currentSpline.bezier_points[curvePointNumber].select_right_handle = True
+            if(curvePointNumber - 1 >= 0 and curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
+                middlePointDistance = currentSpline.bezier_points[curvePointNumber-1].co - currentSpline.bezier_points[curvePointNumber+1].co
+                middlePointDistanceValue = (abs(middlePointDistance[0]) + abs(middlePointDistance[1]) + abs(middlePointDistance[2]))
+                bpy.ops.transform.resize(value=(1+middlePointDistanceValue,1+middlePointDistanceValue,1+middlePointDistanceValue))
+        #fix normals and apply loop if required
+        bpy.ops.curve.select_all(action='SELECT')
+        if(loopAnimation == True):
+            bpy.ops.curve.cyclic_toggle()
+        bpy.ops.curve.normals_make_consistent()
+        bpy.ops.object.editmode_toggle()
+                
+    def execute(self, context):
+        #currently selected objects which paths need to be made for
+        objectsForPaths = None
+        #menu properties for creating the motion paths
+        captureInterval = context.scene.EMPATHYCaptureInterval
+        minimumMoveDistance = context.scene.EMPATHYMinimumMovePointDistance
+        minimumRotateDistance = context.scene.EMPATHYMinimumRotatePointDistance
+        minimumPoleDistance = context.scene.EMPATHYMinimumPolePointDistance
+        loopAnimation = context.scene.EMPATHYLoopedAnimation
+        #save menu modes to restore after processing
+        originalKeyframeInsertState = context.scene.tool_settings.use_keyframe_insert_auto
+        originalKeyframePosition = context.scene.frame_current
         
-    def execute(self, context):
-        #clear any existing effects
-        bpy.ops.jspline.revertbone()
-        #store settings for effects
-        sceneObjects = context.scene.objects
-        rotateInfluence = context.scene.JSPLINERotateAmount
-        translateInfluence = context.scene.JSPLINETranslateAmount
-        loopedAnimation = context.scene.JSPLINELooped
-        noiseAmplitude = context.scene.JSPLINENoiseAmplitude
-        #original timeline duration for looping animations
-        originalTimeStart = context.scene.frame_start
-        originalTimeEnd = context.scene.frame_end
-        #how many times to loop the animation to extract a seamless loop
-        loopTimes = 8
-        #speed up processing by setting simplify
-        context.scene.render.use_simplify = True
-        context.scene.render.simplify_subdivision = 0
-        #iterate through all selected bones in pose mode to perform effects
-        for bone in range(len(context.selected_pose_bones)):
-            #store the current selected bone in the iteration
-            targetBone = context.selected_pose_bones[bone]
-            #switch to object mode and create empties for delaying location, rotation and pole
-            bpy.ops.object.mode_set(mode='OBJECT')
-            #store the current selected armature
-            targetArmature = context.view_layer.objects.active
-            if(loopedAnimation == True):
-                self.deleteFramesRegionBones(context,originalTimeEnd,originalTimeEnd+(10*(originalTimeEnd-originalTimeStart)),targetBone)
-                context.scene.frame_end *= loopTimes
-                for fcurve in range(0,len(targetArmature.animation_data.action.fcurves)):
-                    keyframeSet = len(targetArmature.animation_data.action.fcurves[fcurve].keyframe_points)
-                    for keyframe in range(0,keyframeSet):
-                        currentKeyFrame = targetArmature.animation_data.action.fcurves[fcurve].keyframe_points[keyframe]
-                        #don't insert keyframes further than necessary
-                        if(currentKeyFrame.co.x <= originalTimeEnd + ((originalTimeEnd-originalTimeStart)*(loopTimes-1))):
-                            context.scene.frame_set(currentKeyFrame.co.x)
-                            originalAnimationLength = (originalTimeEnd - originalTimeStart) + 1
-                            for repeatNumber in range (1,loopTimes-1):
-                                    targetBone.keyframe_insert(data_path="location",frame=(currentKeyFrame.co.x) + (originalAnimationLength*repeatNumber))
-                                    targetBone.keyframe_insert(data_path="rotation_quaternion",frame=(currentKeyFrame.co.x) + (originalAnimationLength*repeatNumber))
-                context.scene.frame_end = originalTimeEnd + ((originalTimeEnd-originalTimeStart)*loopTimes-1)
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(bpy.context.active_object.mode == 'POSE'):
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+        else:
+            objectsForPaths = context.selected_objects
+        
+        #clear any existing path objects
+        #bpy.ops.empathy.clearobjectpaths()
+        
+        #for bones
+        if(isUsingBones):
+            activeArmature = bpy.context.active_object
+            bpy.ops.object.editmode_toggle()
+            for disconnectingBone in context.selected_editable_bones:
+                disconnectingBone.use_connect = False
+            bpy.ops.object.editmode_toggle()
+        
+        #step through all selected objects and assign to motion paths
+        for pathingObject in objectsForPaths: #may be bones or objects
             bpy.ops.object.select_all(action='DESELECT')
-            bpy.ops.object.empty_add(type='PLAIN_AXES',location=(0,0,0))
-            context.object.name = "JSPLINE_TransformSmoothAxes" 
-            transformSmoothObject = context.object
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.ops.object.empty_add(type='PLAIN_AXES',location=(0,10,0))
-            context.object.name = "JSPLINE_RotateSmoothAxes" 
-            rotateSmoothObject = context.object
-            bpy.ops.object.select_all(action='DESELECT')
-            bpy.ops.object.empty_add(type='PLAIN_AXES',location=(0,10,0))
-            context.object.name = "JSPLINE_PoleSmoothAxes" 
-            poleSmoothObject = context.object
-            #manage collections
-            self.setupCollection(context,"JSPLINEEmpties_" + targetArmature.name)
-            self.assignToCollection(context,"JSPLINEEmpties_" + targetArmature.name,transformSmoothObject)
-            self.assignToCollection(context,"JSPLINEEmpties_" + targetArmature.name,rotateSmoothObject)
-            self.assignToCollection(context,"JSPLINEEmpties_" + targetArmature.name,poleSmoothObject)
-            #set rotations to quaternion to avoid gimbal lock
-            sceneObjects["JSPLINE_RotateSmoothAxes"].rotation_mode = 'QUATERNION'
-            sceneObjects["JSPLINE_TransformSmoothAxes"].rotation_mode = 'QUATERNION'
-            sceneObjects["JSPLINE_PoleSmoothAxes"].rotation_mode = 'QUATERNION'
-            #snap the empties to the desired locations on each bone, with a long distance to improve rotation smoothing effects
-            positionEmptiesConstraint = bpy.data.objects["JSPLINE_TransformSmoothAxes"].constraints.new('COPY_TRANSFORMS')
-            positionEmptiesConstraint.target = targetArmature
-            positionEmptiesConstraint.subtarget = targetBone.name
-            sceneObjects["JSPLINE_RotateSmoothAxes"].parent = targetArmature
-            sceneObjects["JSPLINE_RotateSmoothAxes"].parent_type = 'BONE'
-            sceneObjects["JSPLINE_RotateSmoothAxes"].parent_bone = targetBone.name
-            sceneObjects["JSPLINE_RotateSmoothAxes"].location = [0,10,0]
-            sceneObjects["JSPLINE_PoleSmoothAxes"].parent = targetArmature
-            sceneObjects["JSPLINE_PoleSmoothAxes"].parent_type = 'BONE'
-            sceneObjects["JSPLINE_PoleSmoothAxes"].parent_bone = targetBone.name
-            sceneObjects["JSPLINE_PoleSmoothAxes"].location = [10,0,0]
-            #bake the motion of each empty so that it can be delayed
-            bpy.ops.object.select_all(action='DESELECT')
-            sceneObjects["JSPLINE_TransformSmoothAxes"].select_set(True)
-            context.view_layer.objects.active = sceneObjects["JSPLINE_TransformSmoothAxes"]
-            #offset start for keyframes
-            keyframeOffsetStart = 1
-            #delay x,y,z position
-            if(loopedAnimation == True):
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=3,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            else:
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=1,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            for fcurve in range(0,3):
-                for keyframe in reversed(range(keyframeOffsetStart,len(sceneObjects["JSPLINE_TransformSmoothAxes"].animation_data.action.fcurves[fcurve].keyframe_points))):
-                    animationFcurves = sceneObjects["JSPLINE_TransformSmoothAxes"].animation_data.action.fcurves[fcurve]
-                    self.delayFcurves(context,animationFcurves,1,keyframe)
-                    #don't add noise to looped animations
-                    if(loopedAnimation == False):
-                        self.addFcurveNoise(context,animationFcurves,noiseAmplitude*0.1)
-            bpy.ops.object.select_all(action='DESELECT')
-            sceneObjects["JSPLINE_RotateSmoothAxes"].select_set(True)
-            context.view_layer.objects.active = sceneObjects["JSPLINE_RotateSmoothAxes"]
-            #delay x,y,z ik rotation smoothing and pole smoothing separately
-            if(loopedAnimation == True):
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=3,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            else:
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=1,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            for fcurve in range(0,3):
-                for keyframe in reversed(range(keyframeOffsetStart,len(sceneObjects["JSPLINE_RotateSmoothAxes"].animation_data.action.fcurves[fcurve].keyframe_points))):
-                    animationFcurves = sceneObjects["JSPLINE_RotateSmoothAxes"].animation_data.action.fcurves[fcurve]
-                    #don't add noise or too much rotation delay to looped animations
-                    if(loopedAnimation == True):
-                        self.delayFcurves(context,animationFcurves,1,keyframe)
-                    else:
-                        self.delayFcurves(context,animationFcurves,2,keyframe)
-                        self.addFcurveNoise(context,animationFcurves,noiseAmplitude)
-            bpy.ops.object.select_all(action='DESELECT')
-            sceneObjects["JSPLINE_PoleSmoothAxes"].select_set(True)
-            context.view_layer.objects.active = sceneObjects["JSPLINE_PoleSmoothAxes"]
-            #baking for pole smooth
-            if(loopedAnimation == True):
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=3,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            else:
-                bpy.ops.nla.bake(frame_start=context.scene.frame_start,frame_end=context.scene.frame_end,step=1,only_selected=True,visual_keying=True,clear_constraints=True,clear_parents=True,use_current_action=True,bake_types={'OBJECT'})
-            for fcurve in range(0,3):
-                for keyframe in reversed(range(keyframeOffsetStart,len(sceneObjects["JSPLINE_PoleSmoothAxes"].animation_data.action.fcurves[fcurve].keyframe_points))):
-                    animationFcurves = sceneObjects["JSPLINE_PoleSmoothAxes"].animation_data.action.fcurves[fcurve]
-                    self.delayFcurves(context,animationFcurves,1,keyframe)
-                    #don't add noise to looped animations
-                    if(loopedAnimation == False):
-                        self.addFcurveNoise(context,animationFcurves,noiseAmplitude)
-            #if the animation is intended to be looped, shift the baked animation to make it happen
-            if(loopedAnimation == True):
-                #iterate over axes types to save lines
-                axesTypes = ["JSPLINE_PoleSmoothAxes","JSPLINE_RotateSmoothAxes","JSPLINE_TransformSmoothAxes"]
-                originalAnimationLength = originalTimeEnd - originalTimeStart
-                for axesType in range(len(axesTypes)):
-                    for fcurve in range(len(sceneObjects[axesTypes[axesType]].animation_data.action.fcurves)):
-                        animationFcurves = sceneObjects[axesTypes[axesType]].animation_data.action.fcurves[fcurve]
-                        for keyframe in range(0,len(sceneObjects[axesTypes[axesType]].animation_data.action.fcurves[fcurve].keyframe_points)):
-                            animationFcurves.keyframe_points[keyframe].co.x -= originalAnimationLength
-                            animationFcurves.update()
-            boneTranslateConstraint = targetBone.constraints.new('COPY_LOCATION')
-            boneTranslateConstraint.target = sceneObjects["JSPLINE_TransformSmoothAxes"]
-            boneTranslateConstraint.name = "JSPLINE_TranslateDelayEffect"
-            boneTranslateConstraint.influence = translateInfluence
-            boneRotateConstraint = targetBone.constraints.new('IK')
-            boneRotateConstraint.chain_count = 1
-            boneRotateConstraint.target = sceneObjects["JSPLINE_RotateSmoothAxes"]
-            boneRotateConstraint.pole_target = sceneObjects["JSPLINE_PoleSmoothAxes"]
-            boneRotateConstraint.name = "JSPLINE_RotateDelayEffect"
-            boneRotateConstraint.influence = rotateInfluence
-            sceneObjects["JSPLINE_TransformSmoothAxes"].name = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_TransformEffect"
-            sceneObjects["JSPLINE_RotateSmoothAxes"].name = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_RotateEffect"
-            sceneObjects["JSPLINE_PoleSmoothAxes"].name = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_PoleEffect"
-            #if the animation is looped, return the frame end to the original value
-            if(loopedAnimation == True):
-                context.scene.frame_end = originalTimeEnd
-            #return to pose mode with the originally selected bones
-            bpy.ops.object.select_all(action='DESELECT')
-            targetArmature.select_set(True)
-            context.view_layer.objects.active = targetArmature
-            bpy.ops.object.posemode_toggle()
-        #if it's a looping animation, reset the frame region to the original length
-        if(loopedAnimation == True):
-            context.scene.frame_start = originalTimeStart
-            context.scene.frame_end = originalTimeEnd
-        #go to edit mode to make selected bones not connected to enable translation effect
-        bpy.ops.object.mode_set(mode='EDIT')
-        for bone in range(len(context.selected_editable_bones)):
-            targetEditBone = context.selected_editable_bones[bone]
-            targetEditBone.use_connect = False
-        bpy.ops.object.posemode_toggle()
-        #turn off simplify after processing
-        context.scene.render.use_simplify = False
-        return {'FINISHED'}
-
-#button to remove the delay effect from the selected bone(s)
-class JSPLINE_OT_RevertBone(bpy.types.Operator):
-    bl_idname = "jspline.revertbone"
-    bl_label = "Remove Delay From Selected Bone(s)"
-    bl_description = "Remove the delay effect from the selected bone(s)."
             
-    def execute(self, context):
-        #speed up processing by setting simplify
-        context.scene.render.use_simplify = True
-        context.scene.render.simplify_subdivision = 0
-        sceneObjects = context.scene.objects
-        #iterate through all selected bones
-        for bone in range(len(context.selected_pose_bones)):
-            #store the current selected bone in the iteration
-            targetBone = context.selected_pose_bones[bone]
-            #switch to object mode and remove all empties and constraints if they exist
-            bpy.ops.object.mode_set(mode='OBJECT')
-            #store the current selected armature
-            targetArmature = context.view_layer.objects.active
-            bpy.ops.object.select_all(action='DESELECT')
-            if("JSPLINE_TranslateDelayEffect" in targetBone.constraints):
-                targetBone.constraints.remove(targetBone.constraints["JSPLINE_TranslateDelayEffect"])
-            if("JSPLINE_RotateDelayEffect" in targetBone.constraints):
-                targetBone.constraints.remove(targetBone.constraints["JSPLINE_RotateDelayEffect"])
-            transformSmoothName = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_TransformEffect"
-            rotateSmoothName = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_RotateEffect"
-            poleSmoothName = "JSPLINE_" + targetArmature.name + "_" + targetBone.name + "_PoleEffect"
-            if(transformSmoothName in sceneObjects):
-                sceneObjects[transformSmoothName].select_set(True)
-            if(rotateSmoothName in sceneObjects):
-                sceneObjects[rotateSmoothName].select_set(True)
-            if(poleSmoothName in sceneObjects):
-                sceneObjects[poleSmoothName].select_set(True)
-            bpy.ops.object.delete()
-            #return to pose mode with the originally selected bones
-            bpy.ops.object.select_all(action='DESELECT')
-            targetArmature.select_set(True)
-            context.view_layer.objects.active = targetArmature
-            bpy.ops.object.posemode_toggle()
-        #turn off simplify after processing
-        context.scene.render.use_simplify = False
-        return {'FINISHED'}
-    
-#button to keyframe the selected influence for the selected bone(s) at the current time
-class JSPLINE_OT_KeyInfluence(bpy.types.Operator):
-    bl_idname = "jspline.keyinfluence"
-    bl_label = "Keyframe Influence For Selected Bone(s)."
-    bl_description = "Keyframe the specified effect influence for the selected bone(s) at the current time."
-    def execute(self, context):
-        for bone in range(len(context.selected_pose_bones)):
-            targetBone = context.selected_pose_bones[bone]
-            if("JSPLINE_TranslateDelayEffect" in targetBone.constraints):
-                targetBone.constraints["JSPLINE_TranslateDelayEffect"].influence = context.scene.JSPLINETranslateAmount
-                targetBone.constraints["JSPLINE_TranslateDelayEffect"].keyframe_insert(data_path="influence",frame=context.scene.frame_current)
-            if("JSPLINE_RotateDelayEffect" in targetBone.constraints):
-                targetBone.constraints["JSPLINE_RotateDelayEffect"].influence = context.scene.JSPLINERotateAmount
-                targetBone.constraints["JSPLINE_RotateDelayEffect"].keyframe_insert(data_path="influence",frame=context.scene.frame_current)
-        return {'FINISHED'}
-    
-#button to keyframe no effect for the selected bone(s) at the current time
-class JSPLINE_OT_KeyDisable(bpy.types.Operator):
-    bl_idname = "jspline.keydisable"
-    bl_label = "Keyframe No Effect For Selected Bone(s)."
-    bl_description = "Insert a keyframe to disable the effect on the selected bone(s) at the current time."
-    def execute(self, context):
-        for bone in range(len(context.selected_pose_bones)):
-            targetBone = context.selected_pose_bones[bone]
-            if("JSPLINE_TranslateDelayEffect" in targetBone.constraints):
-                targetBone.constraints["JSPLINE_TranslateDelayEffect"].influence = 0
-                targetBone.constraints["JSPLINE_TranslateDelayEffect"].keyframe_insert(data_path="influence",frame=context.scene.frame_current)
-            if("JSPLINE_RotateDelayEffect" in targetBone.constraints):
-                targetBone.constraints["JSPLINE_RotateDelayEffect"].influence = 0
-                targetBone.constraints["JSPLINE_RotateDelayEffect"].keyframe_insert(data_path="influence",frame=context.scene.frame_current)
+            #for bones
+            if(isUsingBones):
+                objectCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathingObject.name
+            else:
+                objectCollectionName = "EMPATHY_COMPONENTS_" + pathingObject.name
+            
+            rotateEmptyName = "EMPATHY_ROTATEEMPTY_" + pathingObject.name
+            poleEmptyName = "EMPATHY_POLEEMPTY_" + pathingObject.name
+            moveEmptyName = "EMPATHY_MOVEEMPTY_" + pathingObject.name
+            
+            copyLocationConstraintName = "EMPATHY_MOVECONSTRAINT"
+            cancelRotationConstraintName = "EMPATHY_ROTATECANCELCONSTRAINT"
+            followPathConstraintName = "EMPATHY_PATHCONSTRAINT"
+            rotateZTrackConstraintName = "EMPATHY_ROTATEZTRACKCONSTRAINT"
+            rotateXTrackConstraintName = "EMPATHY_ROTATEXTRACKCONSTRAINT"
+            poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
+
+            poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
+            
+            movePathName = "EMPATHY_MOVEPATH_" +  str(pathingObject.name)
+            rotatePathName = "EMPATHY_ROTATEPATH_" +  str(pathingObject.name)
+            polePathName = "EMPATHY_POLEPATH_" +  str(pathingObject.name)
+            
+            #create collection to hold path components for this object
+            self.setupCollection(context,objectCollectionName)
+            
+            #add empty to track the rotation
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,20))
+            objectRotateEmpty = bpy.context.object
+            objectRotateEmpty.name = rotateEmptyName
+            
+            #for bones
+            if(isUsingBones):
+                objectRotateEmpty.parent = activeArmature
+                objectRotateEmpty.parent_type = 'BONE'
+                objectRotateEmpty.parent_bone = pathingObject.name
+            else:
+                objectRotateEmpty.parent = pathingObject
+                
+            objectRotateEmpty.show_in_front = True
+            self.assignToCollection(context,objectCollectionName,objectRotateEmpty)
+            
+            #add empty to track the pole
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,20,0))
+            objectPoleEmpty = bpy.context.object
+            objectPoleEmpty.name = poleEmptyName
+            
+            #for bones
+            if(isUsingBones):
+                objectPoleEmpty.parent = activeArmature
+                objectPoleEmpty.parent_type = 'BONE'
+                objectPoleEmpty.parent_bone = pathingObject.name
+            else:
+                objectPoleEmpty.parent = pathingObject
+                
+            objectPoleEmpty.show_in_front = True
+            self.assignToCollection(context,objectCollectionName,objectPoleEmpty)
+            
+            #create empty for target object to follow along path
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,0))
+            objectMoveEmpty = bpy.context.object
+            objectMoveEmpty.name = moveEmptyName
+            
+            #for bones
+            if(isUsingBones):
+                objectMoveEmpty.parent = activeArmature
+                objectMoveEmpty.parent_type = 'BONE'
+                objectMoveEmpty.parent_bone = pathingObject.name
+            else:
+                objectMoveEmpty.parent = pathingObject
+                
+            objectMoveEmpty.show_in_front = True
+            self.assignToCollection(context,objectCollectionName,objectMoveEmpty)
+            
+            #create and compute paths
+            objectMovePath = self.setupBezierCurve(context,movePathName)
+            self.computeCurveShape(context,captureInterval,minimumMoveDistance,objectMovePath,objectMoveEmpty,loopAnimation)
+            self.assignToCollection(context,objectCollectionName,objectMovePath)
+            
+            objectRotatePath = self.setupBezierCurve(context,rotatePathName)
+            self.computeCurveShape(context,captureInterval,minimumRotateDistance,objectRotatePath,objectRotateEmpty,loopAnimation)
+            self.assignToCollection(context,objectCollectionName,objectRotatePath)
+            
+            objectPolePath = self.setupBezierCurve(context,polePathName)
+            self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
+            self.assignToCollection(context,objectCollectionName,objectPolePath)
+            
+            #enable rotation tracking on object
+            objectRotateEmpty.parent = None
+            objectRotateEmpty.location = (0,0,0)
+            rotatePathConstraint = objectRotateEmpty.constraints.new(type='FOLLOW_PATH')
+            rotatePathConstraint.name = followPathConstraintName
+            rotatePathConstraint.target = objectRotatePath
+            rotatePathConstraint.use_fixed_location = True
+            
+            #enable pole tracking on object
+            objectPoleEmpty.parent = None
+            objectPoleEmpty.location = (0,0,0)
+            polePathConstraint = objectPoleEmpty.constraints.new(type='FOLLOW_PATH')
+            polePathConstraint.name = followPathConstraintName
+            polePathConstraint.target = objectPolePath
+            polePathConstraint.use_fixed_location = True
+            
+            #motion tracking along path
+            objectMoveEmpty.parent = None
+            objectMoveEmpty.location = (0,0,0)
+            movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
+            movePathConstraint.name = followPathConstraintName
+            movePathConstraint.target = objectMovePath
+            movePathConstraint.use_fixed_location = True
+            
+            #prevent object rotating as a result of the original motion
+            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
+            cancelRotationConstraint.name = cancelRotationConstraintName
+            cancelRotationConstraint.target = objectMoveEmpty
+            
+            #constrain object to movement empty
+            copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
+            copyMoveLocationConstraint.name = copyLocationConstraintName
+            copyMoveLocationConstraint.target = objectMoveEmpty
+            
+            #create tracking constraints with pole to follow rotation empties
+            rotateZTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotateZTrackConstraint.name = rotateZTrackConstraintName
+            rotateZTrackConstraint.target = objectRotateEmpty
+            rotateZTrackConstraint.track_axis = 'TRACK_Y'
+            rotateZTrackConstraint.lock_axis = 'LOCK_Z'
+            
+            rotateXTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotateXTrackConstraint.name = rotateXTrackConstraintName
+            rotateXTrackConstraint.target = objectRotateEmpty
+            rotateXTrackConstraint.track_axis = 'TRACK_Y'
+            rotateXTrackConstraint.lock_axis = 'LOCK_X'
+            
+            poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            poleTrackConstraint.name = poleTrackConstraintName
+            poleTrackConstraint.target = objectPoleEmpty
+            poleTrackConstraint.track_axis = 'TRACK_X'
+            poleTrackConstraint.lock_axis = 'LOCK_Y'
+            
+            #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
+            controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
+            
+            for controlEmptyType in controlEmptyList:
+                #create motion keyframes
+                context.scene.frame_set(context.scene.frame_start)
+                controlEmptyType.constraints[followPathConstraintName].offset_factor = 1
+                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
+                if(loopAnimation == True):
+                    context.scene.frame_set(context.scene.frame_end + 1)
+                else:
+                    context.scene.frame_set(context.scene.frame_end)
+                controlEmptyType.constraints[followPathConstraintName].offset_factor = 0
+                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
+                
+                #pinch handles on keyframes to make start and end points behave linear
+                for keyframePointNumber in range(0,2):
+                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left_type = 'FREE'
+                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right_type = 'FREE'
+                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
+                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
+                    
+        context.scene.tool_settings.use_keyframe_insert_auto = originalKeyframeInsertState
+        context.scene.frame_set(originalKeyframePosition)
+        
         return {'FINISHED'}
 
-#register and unregister all Jeane Spline classes
-jsplineClasses = (  JSPLINE_PT_SpliningPanel,
-                    JSPLINE_OT_ResetDefaults,
-                    JSPLINE_OT_SmoothBone,
-                    JSPLINE_OT_RevertBone,
-                    JSPLINE_OT_KeyInfluence,
-                    JSPLINE_OT_KeyDisable)
+#register and unregister all Empathy classes
+empathyClasses = (  EMPATHY_PT_MenuPanel,
+                    EMPATHY_PT_MenuPanelPose,
+                    EMPATHY_OT_CreateObjectPaths,
+                    EMPATHY_OT_ClearPathsFromSelected)
 
-register, unregister = bpy.utils.register_classes_factory(jsplineClasses)
+register, unregister = bpy.utils.register_classes_factory(empathyClasses)
 
 #register this script for debugging
 if __name__ == '__main__':
