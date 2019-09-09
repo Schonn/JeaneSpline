@@ -38,9 +38,9 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
     bl_context = 'objectmode'
     bl_category = 'Empty Motion Path'
     bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="how many frames to wait between capturing a location for a bezier curve motion path",default=5,min=1)
-    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.6,min=0)
-    bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="the closest that two points can be in a rotation bezier curve motion path",default=1.5,min=0)
-    bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="the closest that two points can be in a pole bezier curve motion path",default=1.5,min=0)
+    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="the closest that two points can be in a rotation bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="the closest that two points can be in a pole bezier curve motion path",default=0.2,min=0)
     bpy.types.Scene.EMPATHYLoopedAnimation = bpy.props.BoolProperty(name="Loop Motion Path",description="make bezier curve motion path cyclic before smoothing for looping animation",default=False)
 
     def draw(self, context):
@@ -82,7 +82,7 @@ class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
         objectsToClear = None
         isUsingBones = False
         activeArmature = None
-        if(bpy.context.active_object.mode == 'POSE'):
+        if(context.active_object.mode == 'POSE'):
             isUsingBones = True
             objectsToClear = context.selected_pose_bones_from_active_object
         else:
@@ -93,7 +93,7 @@ class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
             #for bones
             removableCollectionName = None
             if(isUsingBones):
-                activeArmature = bpy.context.active_object
+                activeArmature = context.active_object
                 bpy.ops.object.posemode_toggle()
                 removableCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathedObject.name
             else:
@@ -122,7 +122,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         if(newCollectionName not in bpy.data.collections.keys()):
             bpy.ops.collection.create(name=newCollectionName)
             if(context.collection.name == "Master Collection"):
-                bpy.context.scene.collection.children.link(bpy.data.collections[newCollectionName])
+                context.scene.collection.children.link(bpy.data.collections[newCollectionName])
             else:
                 bpy.data.collections[context.collection.name].children.link(bpy.data.collections[newCollectionName])
 
@@ -130,16 +130,15 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         if(assignObject.name not in bpy.data.collections[assignCollectionName].objects):
             bpy.data.collections[assignCollectionName].objects.link(assignObject)
             if(context.collection.name == "Master Collection"):
-                bpy.context.scene.collection.objects.unlink(assignObject)
+                context.scene.collection.objects.unlink(assignObject)
             else:
                 bpy.data.collections[context.collection.name].objects.unlink(assignObject)
                 
     def setupBezierCurve(self,context,curveName):
-        bpy.ops.curve.primitive_bezier_curve_add(enter_editmode=True, location=(0,0,0))
-        bpy.ops.curve.select_all(action='DESELECT')
-        pathObject = bpy.context.object
+        bpy.ops.curve.primitive_nurbs_curve_add(enter_editmode=True, location=(0,0,0))
+        pathObject = context.object
         pathObject.name = curveName
-        pathObject.data.splines[0].bezier_points[0].select_control_point = True
+        pathObject.data.splines[0].points[0].select = False
         pathObject.show_in_front = True
         bpy.ops.curve.delete(type='VERT')
         bpy.ops.curve.select_all(action='SELECT')
@@ -153,7 +152,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 context.scene.frame_set(context.scene.frame_end)
             elif(recordKeyFramePoint != 0):
                 context.scene.frame_set(context.scene.frame_current + captureInterval)
-            pathToEdit.data.splines[0].bezier_points[0].co = pathingObject.matrix_world.translation
+            pathToEdit.data.splines[0].points[0].co.xyz = pathingObject.matrix_world.translation
             if(recordKeyFramePoint != maxKeyFrameNumber):
                 bpy.ops.curve.extrude()
                 
@@ -162,44 +161,45 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         #minimum distance for points to need to exist
         pointDistanceMinimum = minimumDistance
         #iterate through curve points and delete points which are too close
-        for curvePointNumber in range(len(currentSpline.bezier_points)):
+        for curvePointNumber in range(len(currentSpline.points)):
             pointDistanceTooSmall = False
             if(curvePointNumber - 1 >= 0):
-                previousPointDistance = currentSpline.bezier_points[curvePointNumber].co - currentSpline.bezier_points[curvePointNumber - 1].co
+                previousPointDistance = currentSpline.points[curvePointNumber].co.xyz - currentSpline.points[curvePointNumber - 1].co.xyz
                 distanceDifferenceValue = abs(previousPointDistance[0]) + abs(previousPointDistance[1]) + abs(previousPointDistance[2])
                 if(distanceDifferenceValue < pointDistanceMinimum):
                     pointDistanceTooSmall = True
-            if(curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
-                nextPointDistance = currentSpline.bezier_points[curvePointNumber].co - currentSpline.bezier_points[curvePointNumber + 1].co
+            if(curvePointNumber + 1 <= len(currentSpline.points)-1):
+                nextPointDistance = currentSpline.points[curvePointNumber].co.xyz - currentSpline.points[curvePointNumber + 1].co.xyz
                 distanceDifferenceValue = abs(nextPointDistance[0]) + abs(nextPointDistance[1]) + abs(nextPointDistance[2])
                 if(distanceDifferenceValue < pointDistanceMinimum):
                     pointDistanceTooSmall = True
             #if the distance between points is too small, mark for deletion
             if(pointDistanceTooSmall == True and curvePointNumber != 0):
-                currentSpline.bezier_points[curvePointNumber].select_control_point = True
-                currentSpline.bezier_points[curvePointNumber].select_left_handle = True
-                currentSpline.bezier_points[curvePointNumber].select_right_handle = True
+                currentSpline.points[curvePointNumber].select = True
         #delete points which are too close
         bpy.ops.curve.delete(type='VERT')
 
-        #iterate through curve points and correct shape
-        for curvePointNumber in range(len(currentSpline.bezier_points)):
-            pointLocation = currentSpline.bezier_points[curvePointNumber].co
-            currentSpline.bezier_points[curvePointNumber].handle_right = (pointLocation[0]+0.1,pointLocation[1],pointLocation[2])
-            currentSpline.bezier_points[curvePointNumber].handle_left = (pointLocation[0]-0.1,pointLocation[1],pointLocation[2])
-            bpy.ops.curve.select_all(action='DESELECT')
-            currentSpline.bezier_points[curvePointNumber].select_control_point = True
-            currentSpline.bezier_points[curvePointNumber].select_left_handle = True
-            currentSpline.bezier_points[curvePointNumber].select_right_handle = True
-            if(curvePointNumber - 1 >= 0 and curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
-                middlePointDistance = currentSpline.bezier_points[curvePointNumber-1].co - currentSpline.bezier_points[curvePointNumber+1].co
-                middlePointDistanceValue = (abs(middlePointDistance[0]) + abs(middlePointDistance[1]) + abs(middlePointDistance[2]))
-                bpy.ops.transform.resize(value=(1+middlePointDistanceValue,1+middlePointDistanceValue,1+middlePointDistanceValue))
+#        #iterate through curve points and correct shape
+#        for curvePointNumber in range(len(currentSpline.bezier_points)):
+#            pointLocation = currentSpline.bezier_points[curvePointNumber].co
+#            currentSpline.bezier_points[curvePointNumber].handle_right = (pointLocation[0]+0.1,pointLocation[1],pointLocation[2])
+#            currentSpline.bezier_points[curvePointNumber].handle_left = (pointLocation[0]-0.1,pointLocation[1],pointLocation[2])
+#            bpy.ops.curve.select_all(action='DESELECT')
+#            currentSpline.bezier_points[curvePointNumber].select_control_point = True
+#            currentSpline.bezier_points[curvePointNumber].select_left_handle = True
+#            currentSpline.bezier_points[curvePointNumber].select_right_handle = True
+#            if(curvePointNumber - 1 >= 0 and curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
+#                middlePointDistance = currentSpline.bezier_points[curvePointNumber-1].co - currentSpline.bezier_points[curvePointNumber+1].co
+#                middlePointDistanceValue = (abs(middlePointDistance[0]) + abs(middlePointDistance[1]) + abs(middlePointDistance[2]))
+#                bpy.ops.transform.resize(value=(1+middlePointDistanceValue,1+middlePointDistanceValue,1+middlePointDistanceValue))
         #fix normals and apply loop if required
         bpy.ops.curve.select_all(action='SELECT')
         if(loopAnimation == True):
             bpy.ops.curve.cyclic_toggle()
-        bpy.ops.curve.normals_make_consistent()
+#        bpy.ops.curve.normals_make_consistent()
+        currentSpline.use_bezier_u = True
+        currentSpline.use_bezier_u = False
+        currentSpline.use_endpoint_u = True
         bpy.ops.object.editmode_toggle()
                 
     def execute(self, context):
@@ -218,7 +218,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         #for bones
         isUsingBones = False
         activeArmature = None
-        if(bpy.context.active_object.mode == 'POSE'):
+        if(context.active_object.mode == 'POSE'):
             isUsingBones = True
             objectsForPaths = context.selected_pose_bones_from_active_object
         else:
@@ -229,7 +229,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         
         #for bones
         if(isUsingBones):
-            activeArmature = bpy.context.active_object
+            activeArmature = context.active_object
             bpy.ops.object.editmode_toggle()
             for disconnectingBone in context.selected_editable_bones:
                 disconnectingBone.use_connect = False
@@ -252,8 +252,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             copyLocationConstraintName = "EMPATHY_MOVECONSTRAINT"
             cancelRotationConstraintName = "EMPATHY_ROTATECANCELCONSTRAINT"
             followPathConstraintName = "EMPATHY_PATHCONSTRAINT"
-            rotateZTrackConstraintName = "EMPATHY_ROTATEZTRACKCONSTRAINT"
-            rotateXTrackConstraintName = "EMPATHY_ROTATEXTRACKCONSTRAINT"
+            rotatePitchTrackConstraintName = "EMPATHY_ROTATEPITCHTRACKCONSTRAINT"
+            rotateYawTrackConstraintName = "EMPATHY_ROTATEYAWTRACKCONSTRAINT"
             poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
 
             poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
@@ -266,8 +266,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             self.setupCollection(context,objectCollectionName)
             
             #add empty to track the rotation
-            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,20))
-            objectRotateEmpty = bpy.context.object
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,5,0))
+            objectRotateEmpty = context.object
             objectRotateEmpty.name = rotateEmptyName
             
             #for bones
@@ -282,8 +282,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             self.assignToCollection(context,objectCollectionName,objectRotateEmpty)
             
             #add empty to track the pole
-            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,20,0))
-            objectPoleEmpty = bpy.context.object
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,5))
+            objectPoleEmpty = context.object
             objectPoleEmpty.name = poleEmptyName
             
             #for bones
@@ -291,6 +291,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 objectPoleEmpty.parent = activeArmature
                 objectPoleEmpty.parent_type = 'BONE'
                 objectPoleEmpty.parent_bone = pathingObject.name
+                objectPoleEmpty.location = (0,-pathingObject.length,5)
             else:
                 objectPoleEmpty.parent = pathingObject
                 
@@ -299,7 +300,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             
             #create empty for target object to follow along path
             bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,0))
-            objectMoveEmpty = bpy.context.object
+            objectMoveEmpty = context.object
             objectMoveEmpty.name = moveEmptyName
             
             #for bones
@@ -307,6 +308,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 objectMoveEmpty.parent = activeArmature
                 objectMoveEmpty.parent_type = 'BONE'
                 objectMoveEmpty.parent_bone = pathingObject.name
+                objectMoveEmpty.location = (0,-pathingObject.length,0)
             else:
                 objectMoveEmpty.parent = pathingObject
                 
@@ -350,34 +352,38 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             movePathConstraint.target = objectMovePath
             movePathConstraint.use_fixed_location = True
             
-            #prevent object rotating as a result of the original motion
-            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
-            cancelRotationConstraint.name = cancelRotationConstraintName
-            cancelRotationConstraint.target = objectMoveEmpty
+#            #prevent object rotating as a result of the original motion
+#            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
+#            cancelRotationConstraint.name = cancelRotationConstraintName
+#            cancelRotationConstraint.target = objectMoveEmpty
             
             #constrain object to movement empty
             copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
             copyMoveLocationConstraint.name = copyLocationConstraintName
             copyMoveLocationConstraint.target = objectMoveEmpty
+            copyMoveLocationConstraint.influence = 0.7
             
             #create tracking constraints with pole to follow rotation empties
-            rotateZTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-            rotateZTrackConstraint.name = rotateZTrackConstraintName
-            rotateZTrackConstraint.target = objectRotateEmpty
-            rotateZTrackConstraint.track_axis = 'TRACK_Y'
-            rotateZTrackConstraint.lock_axis = 'LOCK_Z'
+            rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotatePitchTrackConstraint.name = rotatePitchTrackConstraintName
+            rotatePitchTrackConstraint.target = objectRotateEmpty
+            rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
+            rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
+            rotatePitchTrackConstraint.influence = 0.7
             
-            rotateXTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-            rotateXTrackConstraint.name = rotateXTrackConstraintName
-            rotateXTrackConstraint.target = objectRotateEmpty
-            rotateXTrackConstraint.track_axis = 'TRACK_Y'
-            rotateXTrackConstraint.lock_axis = 'LOCK_X'
+            rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotateYawTrackConstraint.name = rotateYawTrackConstraintName
+            rotateYawTrackConstraint.target = objectRotateEmpty
+            rotateYawTrackConstraint.track_axis = 'TRACK_Y'
+            rotateYawTrackConstraint.lock_axis = 'LOCK_X'
+            rotateYawTrackConstraint.influence = 0.7
             
             poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
             poleTrackConstraint.name = poleTrackConstraintName
             poleTrackConstraint.target = objectPoleEmpty
-            poleTrackConstraint.track_axis = 'TRACK_X'
+            poleTrackConstraint.track_axis = 'TRACK_Z'
             poleTrackConstraint.lock_axis = 'LOCK_Y'
+            poleTrackConstraint.influence = 0.7
             
             #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
             controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
