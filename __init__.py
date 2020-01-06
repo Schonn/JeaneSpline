@@ -24,7 +24,7 @@ bl_info = {
     "name": "Empathy",
     "author": "Pierre",
     "version": (1, 0, 0),
-    "blender": (2, 80, 0),
+    "blender": (2, 81, 0),
     "description": "create editable motion paths using bezier curves and apply delay effects",
     "category": "Animation"
     }
@@ -145,14 +145,19 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         return pathObject
     
     def computeCurveShape(self,context,captureInterval,minimumDistance,pathToEdit,pathingObject,loopAnimation):
+        print("computing curve shape for" + pathingObject.name)
         context.scene.frame_set(context.scene.frame_start)
         maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
+        if(maxKeyFrameNumber < 1):
+            maxKeyFrameNumber = 1
+        print("max key frame number is " + str(maxKeyFrameNumber))
         for recordKeyFramePoint in range(0,maxKeyFrameNumber):
             if(recordKeyFramePoint == maxKeyFrameNumber):
                 context.scene.frame_set(context.scene.frame_end)
             elif(recordKeyFramePoint != 0):
                 context.scene.frame_set(context.scene.frame_current + captureInterval)
             pathToEdit.data.splines[0].points[0].co.xyz = pathingObject.matrix_world.translation
+            print("setting path point" + str(pathingObject.matrix_world.translation))
             if(recordKeyFramePoint != maxKeyFrameNumber):
                 bpy.ops.curve.extrude()
                 
@@ -219,6 +224,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         isUsingBones = False
         activeArmature = None
         if(context.active_object.mode == 'POSE'):
+            print("using bones")
             isUsingBones = True
             objectsForPaths = context.selected_pose_bones_from_active_object
         else:
@@ -265,18 +271,32 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             #create collection to hold path components for this object
             self.setupCollection(context,objectCollectionName)
             
+            
+            #create empty for target object to follow along path
+            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,0))
+            objectMoveEmpty = context.object
+            objectMoveEmpty.name = moveEmptyName
+            
+            #for bones
+            if(isUsingBones):
+                emptyTransformConstraint = objectMoveEmpty.constraints.new(type='COPY_TRANSFORMS')
+                emptyTransformConstraint.name = "EMPATHY_TEMPTRANSFORMCONSTRAINT"
+                emptyTransformConstraint.target = activeArmature
+                emptyTransformConstraint.subtarget = pathingObject.name
+            else:
+                emptyTransformConstraint = objectMoveEmpty.constraints.new(type='COPY_TRANSFORMS')
+                emptyTransformConstraint.name = "EMPATHY_TEMPTRANSFORMCONSTRAINT"
+                emptyTransformConstraint.target = pathingObject
+            
+            objectMoveEmpty.show_in_front = True
+            self.assignToCollection(context,objectCollectionName,objectMoveEmpty)
+            
             #add empty to track the rotation
             bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,5,0))
             objectRotateEmpty = context.object
             objectRotateEmpty.name = rotateEmptyName
             
-            #for bones
-            if(isUsingBones):
-                objectRotateEmpty.parent = activeArmature
-                objectRotateEmpty.parent_type = 'BONE'
-                objectRotateEmpty.parent_bone = pathingObject.name
-            else:
-                objectRotateEmpty.parent = pathingObject
+            objectRotateEmpty.parent = objectMoveEmpty
                 
             objectRotateEmpty.show_in_front = True
             self.assignToCollection(context,objectCollectionName,objectRotateEmpty)
@@ -286,34 +306,11 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             objectPoleEmpty = context.object
             objectPoleEmpty.name = poleEmptyName
             
-            #for bones
-            if(isUsingBones):
-                objectPoleEmpty.parent = activeArmature
-                objectPoleEmpty.parent_type = 'BONE'
-                objectPoleEmpty.parent_bone = pathingObject.name
-                objectPoleEmpty.location = (0,-pathingObject.length,5)
-            else:
-                objectPoleEmpty.parent = pathingObject
+            objectPoleEmpty.parent = objectMoveEmpty
                 
             objectPoleEmpty.show_in_front = True
             self.assignToCollection(context,objectCollectionName,objectPoleEmpty)
-            
-            #create empty for target object to follow along path
-            bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0,0,0))
-            objectMoveEmpty = context.object
-            objectMoveEmpty.name = moveEmptyName
-            
-            #for bones
-            if(isUsingBones):
-                objectMoveEmpty.parent = activeArmature
-                objectMoveEmpty.parent_type = 'BONE'
-                objectMoveEmpty.parent_bone = pathingObject.name
-                objectMoveEmpty.location = (0,-pathingObject.length,0)
-            else:
-                objectMoveEmpty.parent = pathingObject
-                
-            objectMoveEmpty.show_in_front = True
-            self.assignToCollection(context,objectCollectionName,objectMoveEmpty)
+
             
             #create and compute paths
             objectMovePath = self.setupBezierCurve(context,movePathName)
@@ -327,6 +324,11 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             objectPolePath = self.setupBezierCurve(context,polePathName)
             self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
             self.assignToCollection(context,objectCollectionName,objectPolePath)
+            
+            #delete temporary constraint on object move empty
+            for constraintToRemove in objectMoveEmpty.constraints:
+                if("EMPATHY_" in constraintToRemove.name):
+                    objectMoveEmpty.constraints.remove(constraintToRemove)
             
             #enable rotation tracking on object
             objectRotateEmpty.parent = None
@@ -361,7 +363,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
             copyMoveLocationConstraint.name = copyLocationConstraintName
             copyMoveLocationConstraint.target = objectMoveEmpty
-            copyMoveLocationConstraint.influence = 0.7
+            copyMoveLocationConstraint.influence = 1
             
             #create tracking constraints with pole to follow rotation empties
             rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
@@ -369,21 +371,21 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             rotatePitchTrackConstraint.target = objectRotateEmpty
             rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
             rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
-            rotatePitchTrackConstraint.influence = 0.7
+            rotatePitchTrackConstraint.influence = 1
             
             rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
             rotateYawTrackConstraint.name = rotateYawTrackConstraintName
             rotateYawTrackConstraint.target = objectRotateEmpty
             rotateYawTrackConstraint.track_axis = 'TRACK_Y'
             rotateYawTrackConstraint.lock_axis = 'LOCK_X'
-            rotateYawTrackConstraint.influence = 0.7
+            rotateYawTrackConstraint.influence = 1
             
             poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
             poleTrackConstraint.name = poleTrackConstraintName
             poleTrackConstraint.target = objectPoleEmpty
             poleTrackConstraint.track_axis = 'TRACK_Z'
             poleTrackConstraint.lock_axis = 'LOCK_Y'
-            poleTrackConstraint.influence = 0.7
+            poleTrackConstraint.influence = 1
             
             #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
             controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
