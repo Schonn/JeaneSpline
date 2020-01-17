@@ -393,6 +393,36 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
                 self.assignToCollection(context,objectCollectionName,objectPolePath)
                 polePathSegmentList.append(objectPolePath)
+                
+                #motion tracking along path
+                movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
+                movePathConstraint.name = followPathConstraintName + "_Segment" + str(pathSegmentNumber)
+                movePathConstraint.target = objectMovePath
+                movePathConstraint.use_fixed_location = True
+                context.scene.frame_set(context.scene.frame_start-1)
+                movePathConstraint.mute=True
+                movePathConstraint.keyframe_insert(data_path = 'mute') #make constraint start muted
+                context.scene.frame_set(context.scene.frame_start)
+                movePathConstraint.mute=False
+                movePathConstraint.offset_factor = 1
+                movePathConstraint.keyframe_insert(data_path = 'offset_factor')
+                movePathConstraint.keyframe_insert(data_path = 'mute') #make constraint start at path start unmuted
+                context.scene.frame_set(context.scene.frame_end-1)
+                movePathConstraint.mute=False
+                movePathConstraint.keyframe_insert(data_path = 'mute')#make sure that muting is switched on and off at correct time
+                context.scene.frame_set(context.scene.frame_end)
+                movePathConstraint.offset_factor = 0
+                movePathConstraint.mute=True
+                movePathConstraint.keyframe_insert(data_path = 'offset_factor')
+                movePathConstraint.keyframe_insert(data_path = 'mute') #mute after end of path segment to allow next path segment to take over
+                #pinch handles on keyframes to make start and end points behave linear
+                for fcurveData in objectMoveEmpty.animation_data.action.fcurves:
+                    for keyframePoint in fcurveData.keyframe_points:
+                        keyframePoint.handle_left_type = 'FREE'
+                        keyframePoint.handle_right_type = 'FREE'
+                        keyframePoint.handle_left = keyframePoint.co
+                        keyframePoint.handle_right = keyframePoint.co
+            
             
             #join path segment ends
             #movement paths
@@ -409,7 +439,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             context.scene.frame_end = originalTimelineRange[1]
             #delete temporary constraint on object move empty
             for constraintToRemove in objectMoveEmpty.constraints:
-                if("EMPATHY_" in constraintToRemove.name):
+                if("EMPATHY_TEMPTRANSFORMCONSTRAINT" in constraintToRemove.name):
                     objectMoveEmpty.constraints.remove(constraintToRemove)
             
 #            #enable rotation tracking on object
