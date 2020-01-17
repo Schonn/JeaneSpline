@@ -23,9 +23,9 @@ import mathutils
 bl_info = {
     "name": "Empathy",
     "author": "Pierre",
-    "version": (1, 0, 0),
-    "blender": (2, 81, 0),
-    "description": "create editable motion paths using bezier curves and apply delay effects",
+    "version": (1, 0, 1),
+    "blender": (2, 80, 0),
+    "description": "create editable motion paths using curves and apply delay effects",
     "category": "Animation"
     }
 
@@ -49,8 +49,11 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
+        self.layout.operator('empathy.placecurvemarker', text ='Place Curve Split Marker At Current Time') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
+        
+        
 
 #panel class for the empty motion path menu
 class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
@@ -66,6 +69,7 @@ class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
+        self.layout.operator('empathy.placecurvemarker', text ='Place Curve Split Marker At Current Time') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
 
@@ -184,26 +188,17 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         #delete points which are too close
         bpy.ops.curve.delete(type='VERT')
 
-#        #iterate through curve points and correct shape
-#        for curvePointNumber in range(len(currentSpline.bezier_points)):
-#            pointLocation = currentSpline.bezier_points[curvePointNumber].co
-#            currentSpline.bezier_points[curvePointNumber].handle_right = (pointLocation[0]+0.1,pointLocation[1],pointLocation[2])
-#            currentSpline.bezier_points[curvePointNumber].handle_left = (pointLocation[0]-0.1,pointLocation[1],pointLocation[2])
-#            bpy.ops.curve.select_all(action='DESELECT')
-#            currentSpline.bezier_points[curvePointNumber].select_control_point = True
-#            currentSpline.bezier_points[curvePointNumber].select_left_handle = True
-#            currentSpline.bezier_points[curvePointNumber].select_right_handle = True
-#            if(curvePointNumber - 1 >= 0 and curvePointNumber + 1 <= len(currentSpline.bezier_points)-1):
-#                middlePointDistance = currentSpline.bezier_points[curvePointNumber-1].co - currentSpline.bezier_points[curvePointNumber+1].co
-#                middlePointDistanceValue = (abs(middlePointDistance[0]) + abs(middlePointDistance[1]) + abs(middlePointDistance[2]))
-#                bpy.ops.transform.resize(value=(1+middlePointDistanceValue,1+middlePointDistanceValue,1+middlePointDistanceValue))
         #fix normals and apply loop if required
         bpy.ops.curve.select_all(action='SELECT')
         if(loopAnimation == True):
             bpy.ops.curve.cyclic_toggle()
-#        bpy.ops.curve.normals_make_consistent()
+            bpy.ops.curve.select_all(action='DESELECT')
+            currentSpline.points[0].select = True
+            bpy.ops.curve.delete(type='VERT')
+            bpy.ops.curve.select_all(action='SELECT')
         currentSpline.use_bezier_u = True
         currentSpline.use_bezier_u = False
+        currentSpline.order_u = 4
         currentSpline.use_endpoint_u = True
         bpy.ops.object.editmode_toggle()
                 
@@ -231,7 +226,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             objectsForPaths = context.selected_objects
         
         #clear any existing path objects
-        #bpy.ops.empathy.clearobjectpaths()
+        bpy.ops.empathy.clearobjectpaths()
+        
         
         #for bones
         if(isUsingBones):
@@ -240,9 +236,34 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             for disconnectingBone in context.selected_editable_bones:
                 disconnectingBone.use_connect = False
             bpy.ops.object.editmode_toggle()
+            
+            
+        #constants
+        copyLocationConstraintName = "EMPATHY_MOVECONSTRAINT"
+        cancelRotationConstraintName = "EMPATHY_ROTATECANCELCONSTRAINT"
+        followPathConstraintName = "EMPATHY_PATHCONSTRAINT"
+        rotatePitchTrackConstraintName = "EMPATHY_ROTATEPITCHTRACKCONSTRAINT"
+        rotateYawTrackConstraintName = "EMPATHY_ROTATEYAWTRACKCONSTRAINT"
+        poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
+        poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
         
         #step through all selected objects and assign to motion paths
         for pathingObject in objectsForPaths: #may be bones or objects
+            #determine how many split markers exist for the pathing object
+            splitMarkerList = []
+            for splitMarkerName in context.scene.timeline_markers.keys():
+                if(context.scene.timeline_markers[splitMarkerName].frame != context.scene.frame_start and
+                    context.scene.timeline_markers[splitMarkerName].frame != context.scene.frame_end):
+                    #for bones
+                    if(isUsingBones):
+                        if(activeArmature.name in splitMarkerName and pathingObject.name in splitMarkerName):
+                            splitMarkerList.append(context.scene.timeline_markers[splitMarkerName].frame)
+                    else:
+                        if(pathingObject.name in splitMarkerName):
+                            splitMarkerList.append(context.scene.timeline_markers[splitMarkerName].frame)
+            print("marker list is " + str(splitMarkerList))
+            
+            
             bpy.ops.object.select_all(action='DESELECT')
             
             #for bones
@@ -251,18 +272,10 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             else:
                 objectCollectionName = "EMPATHY_COMPONENTS_" + pathingObject.name
             
+            #names for empties incorporating pathing object names
             rotateEmptyName = "EMPATHY_ROTATEEMPTY_" + pathingObject.name
             poleEmptyName = "EMPATHY_POLEEMPTY_" + pathingObject.name
             moveEmptyName = "EMPATHY_MOVEEMPTY_" + pathingObject.name
-            
-            copyLocationConstraintName = "EMPATHY_MOVECONSTRAINT"
-            cancelRotationConstraintName = "EMPATHY_ROTATECANCELCONSTRAINT"
-            followPathConstraintName = "EMPATHY_PATHCONSTRAINT"
-            rotatePitchTrackConstraintName = "EMPATHY_ROTATEPITCHTRACKCONSTRAINT"
-            rotateYawTrackConstraintName = "EMPATHY_ROTATEYAWTRACKCONSTRAINT"
-            poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
-
-            poleTrackConstraintName = "EMPATHY_POLETRACKCONSTRAINT"
             
             movePathName = "EMPATHY_MOVEPATH_" +  str(pathingObject.name)
             rotatePathName = "EMPATHY_ROTATEPATH_" +  str(pathingObject.name)
@@ -311,114 +324,208 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             objectPoleEmpty.show_in_front = True
             self.assignToCollection(context,objectCollectionName,objectPoleEmpty)
 
+
             
-            #create and compute paths
-            objectMovePath = self.setupBezierCurve(context,movePathName)
-            self.computeCurveShape(context,captureInterval,minimumMoveDistance,objectMovePath,objectMoveEmpty,loopAnimation)
-            self.assignToCollection(context,objectCollectionName,objectMovePath)
+            #create path segments between each split point by setting the timeline duration to the
+            originalTimelineRange = [context.scene.frame_start,context.scene.frame_end]
+            splitMarkerList.insert(originalTimelineRange[0],0)
+            pathSegmentCount = len(splitMarkerList)+1
+            movePathSegmentList = [] #segment lists for joining path segment end points
+            rotatePathSegmentList = []
+            polePathSegmentList = []
+            for pathSegmentNumber in range(1,pathSegmentCount):
+                movePathSegmentName = movePathName + "_Segment" + str(pathSegmentNumber)
+                rotatePathSegmentName = rotatePathName + "_Segment" + str(pathSegmentNumber)
+                polePathSegmentName = polePathName + "_Segment" + str(pathSegmentNumber)
+                pathSegmentStartFrame = originalTimelineRange[0]
+                pathSegmentEndFrame = originalTimelineRange[1]
+                if(pathSegmentCount > 1): #a path segment count of 1 means no usable curve split markers
+                    if(pathSegmentNumber == 1): #first path segment is from frame start to marker
+                        pathSegmentEndFrame = splitMarkerList[pathSegmentNumber]
+                    elif(pathSegmentNumber == len(splitMarkerList)):
+                        pathSegmentStartFrame = splitMarkerList[pathSegmentNumber-1]
+                        pathSegmentEndFrame = originalTimelineRange[1]
+                    else:
+                        pathSegmentStartFrame = splitMarkerList[pathSegmentNumber-1]
+                        pathSegmentEndFrame = splitMarkerList[pathSegmentNumber]
+                print("creating path segment " + movePathSegmentName + " from " + str(pathSegmentStartFrame) + "to" + str(pathSegmentEndFrame))
+                context.scene.frame_start = pathSegmentStartFrame
+                context.scene.frame_end = pathSegmentEndFrame
+                #create and compute paths
+                #movement paths
+                objectMovePath = self.setupBezierCurve(context,movePathSegmentName)
+                self.computeCurveShape(context,captureInterval,minimumMoveDistance,objectMovePath,objectMoveEmpty,loopAnimation)
+                self.assignToCollection(context,objectCollectionName,objectMovePath)
+                movePathSegmentList.append(objectMovePath)
+                
+                #rotation paths
+                objectRotatePath = self.setupBezierCurve(context,rotatePathSegmentName)
+                self.computeCurveShape(context,captureInterval,minimumRotateDistance,objectRotatePath,objectRotateEmpty,loopAnimation)
+                self.assignToCollection(context,objectCollectionName,objectRotatePath)
+                rotatePathSegmentList.append(objectMovePath)
+                
+                #pole paths
+                objectPolePath = self.setupBezierCurve(context,polePathSegmentName)
+                self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
+                self.assignToCollection(context,objectCollectionName,objectPolePath)
+                polePathSegmentList.append(objectMovePath)
             
-            objectRotatePath = self.setupBezierCurve(context,rotatePathName)
-            self.computeCurveShape(context,captureInterval,minimumRotateDistance,objectRotatePath,objectRotateEmpty,loopAnimation)
-            self.assignToCollection(context,objectCollectionName,objectRotatePath)
+            #join path segment ends
+            #movement paths
+            bpy.ops.object.select_all(action='DESELECT')
+            for movePathSegment in movePathSegmentList:
+                movePathSegment.select_set(True)
             
-            objectPolePath = self.setupBezierCurve(context,polePathName)
-            self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
-            self.assignToCollection(context,objectCollectionName,objectPolePath)
+            bpy.ops.object.editmode_toggle()
+            context.scene.tool_settings.transform_pivot_point = 'BOUNDING_BOX_CENTER'
+            for curveObjectNumber in range(0,len(bpy.context.selected_objects)):
+                if(curveObjectNumber < len(bpy.context.selected_objects)-1):
+                    bpy.ops.curve.select_all(action='DESELECT')
+                    firstCurvePoint = bpy.context.selected_objects[curveObjectNumber]
+                    secondCurvePoint = bpy.context.selected_objects[curveObjectNumber+1]
+                    firstCurvePoint.data.splines[0].points[0].select = True
+                    secondCurvePoint.data.splines[0].points[-1].select = True
+                    bpy.ops.transform.resize(value=(0,0,0))
+                    
             
+            
+            #reset timeline to original length
+            context.scene.frame_start = originalTimelineRange[0]
+            context.scene.frame_end = originalTimelineRange[1]
             #delete temporary constraint on object move empty
             for constraintToRemove in objectMoveEmpty.constraints:
                 if("EMPATHY_" in constraintToRemove.name):
                     objectMoveEmpty.constraints.remove(constraintToRemove)
             
-            #enable rotation tracking on object
-            objectRotateEmpty.parent = None
-            objectRotateEmpty.location = (0,0,0)
-            rotatePathConstraint = objectRotateEmpty.constraints.new(type='FOLLOW_PATH')
-            rotatePathConstraint.name = followPathConstraintName
-            rotatePathConstraint.target = objectRotatePath
-            rotatePathConstraint.use_fixed_location = True
-            
-            #enable pole tracking on object
-            objectPoleEmpty.parent = None
-            objectPoleEmpty.location = (0,0,0)
-            polePathConstraint = objectPoleEmpty.constraints.new(type='FOLLOW_PATH')
-            polePathConstraint.name = followPathConstraintName
-            polePathConstraint.target = objectPolePath
-            polePathConstraint.use_fixed_location = True
-            
-            #motion tracking along path
-            objectMoveEmpty.parent = None
-            objectMoveEmpty.location = (0,0,0)
-            movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
-            movePathConstraint.name = followPathConstraintName
-            movePathConstraint.target = objectMovePath
-            movePathConstraint.use_fixed_location = True
-            
-#            #prevent object rotating as a result of the original motion
-#            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
-#            cancelRotationConstraint.name = cancelRotationConstraintName
-#            cancelRotationConstraint.target = objectMoveEmpty
-            
-            #constrain object to movement empty
-            copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
-            copyMoveLocationConstraint.name = copyLocationConstraintName
-            copyMoveLocationConstraint.target = objectMoveEmpty
-            copyMoveLocationConstraint.influence = 1
-            
-            #create tracking constraints with pole to follow rotation empties
-            rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-            rotatePitchTrackConstraint.name = rotatePitchTrackConstraintName
-            rotatePitchTrackConstraint.target = objectRotateEmpty
-            rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
-            rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
-            rotatePitchTrackConstraint.influence = 1
-            
-            rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-            rotateYawTrackConstraint.name = rotateYawTrackConstraintName
-            rotateYawTrackConstraint.target = objectRotateEmpty
-            rotateYawTrackConstraint.track_axis = 'TRACK_Y'
-            rotateYawTrackConstraint.lock_axis = 'LOCK_X'
-            rotateYawTrackConstraint.influence = 1
-            
-            poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-            poleTrackConstraint.name = poleTrackConstraintName
-            poleTrackConstraint.target = objectPoleEmpty
-            poleTrackConstraint.track_axis = 'TRACK_Z'
-            poleTrackConstraint.lock_axis = 'LOCK_Y'
-            poleTrackConstraint.influence = 1
-            
-            #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
-            controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
-            
-            for controlEmptyType in controlEmptyList:
-                #create motion keyframes
-                context.scene.frame_set(context.scene.frame_start)
-                controlEmptyType.constraints[followPathConstraintName].offset_factor = 1
-                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
-                if(loopAnimation == True):
-                    context.scene.frame_set(context.scene.frame_end + 1)
-                else:
-                    context.scene.frame_set(context.scene.frame_end)
-                controlEmptyType.constraints[followPathConstraintName].offset_factor = 0
-                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
-                
-                #pinch handles on keyframes to make start and end points behave linear
-                for keyframePointNumber in range(0,2):
-                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left_type = 'FREE'
-                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right_type = 'FREE'
-                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
-                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
-                    
+#            #enable rotation tracking on object
+#            objectRotateEmpty.parent = None
+#            objectRotateEmpty.location = (0,0,0)
+#            rotatePathConstraint = objectRotateEmpty.constraints.new(type='FOLLOW_PATH')
+#            rotatePathConstraint.name = followPathConstraintName
+#            rotatePathConstraint.target = objectRotatePath
+#            rotatePathConstraint.use_fixed_location = True
+#            
+#            #enable pole tracking on object
+#            objectPoleEmpty.parent = None
+#            objectPoleEmpty.location = (0,0,0)
+#            polePathConstraint = objectPoleEmpty.constraints.new(type='FOLLOW_PATH')
+#            polePathConstraint.name = followPathConstraintName
+#            polePathConstraint.target = objectPolePath
+#            polePathConstraint.use_fixed_location = True
+#            
+#            #motion tracking along path
+#            objectMoveEmpty.parent = None
+#            objectMoveEmpty.location = (0,0,0)
+#            movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
+#            movePathConstraint.name = followPathConstraintName
+#            movePathConstraint.target = objectMovePath
+#            movePathConstraint.use_fixed_location = True
+#            
+##            #prevent object rotating as a result of the original motion
+##            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
+##            cancelRotationConstraint.name = cancelRotationConstraintName
+##            cancelRotationConstraint.target = objectMoveEmpty
+#            
+#            #constrain object to movement empty
+#            copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
+#            copyMoveLocationConstraint.name = copyLocationConstraintName
+#            copyMoveLocationConstraint.target = objectMoveEmpty
+#            copyMoveLocationConstraint.influence = 1
+#            
+#            #create tracking constraints with pole to follow rotation empties
+#            rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+#            rotatePitchTrackConstraint.name = rotatePitchTrackConstraintName
+#            rotatePitchTrackConstraint.target = objectRotateEmpty
+#            rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
+#            rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
+#            rotatePitchTrackConstraint.influence = 1
+#            
+#            rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+#            rotateYawTrackConstraint.name = rotateYawTrackConstraintName
+#            rotateYawTrackConstraint.target = objectRotateEmpty
+#            rotateYawTrackConstraint.track_axis = 'TRACK_Y'
+#            rotateYawTrackConstraint.lock_axis = 'LOCK_X'
+#            rotateYawTrackConstraint.influence = 1
+#            
+#            poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+#            poleTrackConstraint.name = poleTrackConstraintName
+#            poleTrackConstraint.target = objectPoleEmpty
+#            poleTrackConstraint.track_axis = 'TRACK_Z'
+#            poleTrackConstraint.lock_axis = 'LOCK_Y'
+#            poleTrackConstraint.influence = 1
+#            
+#            #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
+#            controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
+#            
+#            for controlEmptyType in controlEmptyList:
+#                #create motion keyframes
+#                context.scene.frame_set(context.scene.frame_start)
+#                controlEmptyType.constraints[followPathConstraintName].offset_factor = 1
+#                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
+#                if(loopAnimation == True):
+#                    context.scene.frame_set(context.scene.frame_end + 1)
+#                else:
+#                    context.scene.frame_set(context.scene.frame_end)
+#                controlEmptyType.constraints[followPathConstraintName].offset_factor = 0
+#                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
+#                
+#                #pinch handles on keyframes to make start and end points behave linear
+#                for keyframePointNumber in range(0,2):
+#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left_type = 'FREE'
+#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right_type = 'FREE'
+#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
+#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
+#                    
         context.scene.tool_settings.use_keyframe_insert_auto = originalKeyframeInsertState
         context.scene.frame_set(originalKeyframePosition)
         
+        return {'FINISHED'}
+    
+#button to create timeline markers to define the beginning and end of curve segments
+class EMPATHY_OT_PlaceCurveSegmentMarker(bpy.types.Operator):
+    bl_idname = "empathy.placecurvemarker"
+    bl_label = "Place curve split timeline marker for current objects"
+    bl_description = "Place a timeline marker at the current time to define a split point in generated curves for the selected objects"
+    
+    #get the next highest marker number for distinct marker numbering
+    def findNextHighestMarkerNumber(self, context):
+        maxMarkerNumber = 0 #find next highest marker number
+        for timelineMarkerName in context.scene.timeline_markers.keys():
+            currentMarkerNumber = timelineMarkerName.split("_")
+            if(int(currentMarkerNumber[-1]) > maxMarkerNumber):
+                maxMarkerNumber = int(currentMarkerNumber[-1])
+        return maxMarkerNumber
+    
+    def execute(self, context):
+        #currently selected objects to place curve segment markers for
+        objectsForPaths = None
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(context.active_object.mode == 'POSE'):
+            print("using bones")
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+            activeArmature = context.active_object
+        else:
+            objectsForPaths = context.selected_objects
+            
+        #step through all selected objects and create a curve segment marker for them at the current time
+        for pathingObject in objectsForPaths: #may be bones or objects
+            #for bones
+            nextMarkerNumber = self.findNextHighestMarkerNumber(context) + 1
+            if(isUsingBones == True):
+                context.scene.timeline_markers.new(name = "EMP_SPT_" + activeArmature.name + "_" + pathingObject.name + "_" + str(nextMarkerNumber),frame = bpy.context.scene.frame_current)
+            else:
+                context.scene.timeline_markers.new(name = "EMP_SPT_" + pathingObject.name + "_" + str(nextMarkerNumber),frame = bpy.context.scene.frame_current)
         return {'FINISHED'}
 
 #register and unregister all Empathy classes
 empathyClasses = (  EMPATHY_PT_MenuPanel,
                     EMPATHY_PT_MenuPanelPose,
                     EMPATHY_OT_CreateObjectPaths,
-                    EMPATHY_OT_ClearPathsFromSelected)
+                    EMPATHY_OT_ClearPathsFromSelected,
+                    EMPATHY_OT_PlaceCurveSegmentMarker)
 
 register, unregister = bpy.utils.register_classes_factory(empathyClasses)
 
