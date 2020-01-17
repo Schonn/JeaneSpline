@@ -1,4 +1,4 @@
-# Jeane Spline Animation Addon
+# Physics Puppet Blender Addon
 # Copyright (C) 2018 Pierre
 #
 # This program is free software: you can redistribute it and/or modify it under
@@ -23,7 +23,7 @@ import mathutils
 bl_info = {
     "name": "Jeane Spline",
     "author": "Pierre",
-    "version": (1, 0, 5),
+    "version": (1, 0, 8),
     "blender": (2, 80, 0),
     "description": "Animation Delay Effect",
     "category": "Animation"
@@ -37,10 +37,11 @@ class JSPLINE_PT_SpliningPanel(bpy.types.Panel):
     bl_label = 'Delay Effect'
     bl_context = 'posemode'
     bl_category = 'Jeane Spline'
-    bpy.types.Scene.JSPLINERotateAmount = bpy.props.FloatProperty(name="Effect Rotation Influence",description="The influence that the rotation delay effect will have on the selected bone(s).",default=1,min=0,max=1)
-    bpy.types.Scene.JSPLINETranslateAmount = bpy.props.FloatProperty(name="Effect Translation Influence",description="The influence that the translation delay effect will have on the selected bone(s).",default=0.5,min=0,max=1)
-    bpy.types.Scene.JSPLINENoiseAmplitude = bpy.props.FloatProperty(name="Effect Noise Amplitude",description="The amount of rotation and translation noise that will be added to the selected bone(s).",default=0.1,min=0,max=5)
-    bpy.types.Scene.JSPLINELooped = bpy.props.BoolProperty(name="Seamless Looping Animation",description="Cut the animation to loop seamlessly in the current timeline region.",default=False)
+    bpy.types.Scene.JSPLINERotateAmount = bpy.props.FloatProperty(name="Effect Rotation Influence",description="The influence that the rotation delay effect will have on the selected bone(s)",default=1,min=0,max=1)
+    bpy.types.Scene.JSPLINETranslateAmount = bpy.props.FloatProperty(name="Effect Translation Influence",description="The influence that the translation delay effect will have on the selected bone(s)",default=0.5,min=0,max=1)
+    bpy.types.Scene.JSPLINENoiseAmplitude = bpy.props.FloatProperty(name="Effect Noise Amplitude",description="The amount of rotation and translation noise that will be added to the selected bone(s)",default=0.1,min=0,max=5)
+    bpy.types.Scene.JSPLINELooped = bpy.props.BoolProperty(name="Seamless Looping Animation",description="Cut the animation to loop seamlessly in the current timeline region",default=False)
+    bpy.types.Scene.JSPLINEEnvelopePercent = bpy.props.IntProperty(name="Looping Envelope Timeline Percent",description="The percentage from the start and end of the timeline that keyframes will be placed to create an influence envelope",default=50,min=1,max=50)
     
     def draw(self, context):
         self.layout.prop(context.scene,"JSPLINELooped")
@@ -51,7 +52,10 @@ class JSPLINE_PT_SpliningPanel(bpy.types.Panel):
         self.layout.operator('jspline.revertbone', text ='Remove Effect From Selected Bone(s)')
         self.layout.operator('jspline.keyinfluence', text ='Keyframe Influence For Selected Bone(s)')
         self.layout.operator('jspline.keydisable', text ='Keyframe Disable For Selected Bone(s)')
+        self.layout.prop(context.scene,"JSPLINEEnvelopePercent",slider=True)
+        self.layout.operator('jspline.keyenvelope', text ='Keyframe Envelope For Selected Bone(s)')
         self.layout.operator('jspline.resetdefault', text ='Reset Effect Settings To Default')        
+
 
 #button to reset Jeane Spline to default settings    
 class JSPLINE_OT_ResetDefaults(bpy.types.Operator):
@@ -62,6 +66,7 @@ class JSPLINE_OT_ResetDefaults(bpy.types.Operator):
         context.scene.JSPLINERotateAmount = 1 #set the rotate influence to full by default
         context.scene.JSPLINETranslateAmount = 0.5 #reduce the amount of translation delay by default
         context.scene.JSPLINENoiseAmplitude = 0.1 #reduce the amount of noise by default
+        context.scene.JSPLINEEnvelopePercent = 50 #triangular shaped envelope by default
         return {'FINISHED'}
 
 #button to apply the delay effect to the selected bone(s)
@@ -131,6 +136,10 @@ class JSPLINE_OT_SmoothBone(bpy.types.Operator):
                 bpy.data.collections[context.collection.name].objects.unlink(assignObject)
         
     def execute(self, context):
+        #make sure empties are enabled to avoid null error
+        originalEmptyVisibility = context.space_data.show_object_viewport_empty
+        context.space_data.show_object_viewport_empty = True
+        
         #clear any existing effects
         bpy.ops.jspline.revertbone()
         #store settings for effects
@@ -297,6 +306,10 @@ class JSPLINE_OT_SmoothBone(bpy.types.Operator):
         bpy.ops.object.posemode_toggle()
         #turn off simplify after processing
         context.scene.render.use_simplify = False
+        
+        #return empty visibility to user set state after processing
+        context.space_data.show_object_viewport_empty = originalEmptyVisibility
+        
         return {'FINISHED'}
 
 #button to remove the delay effect from the selected bone(s)
@@ -306,6 +319,10 @@ class JSPLINE_OT_RevertBone(bpy.types.Operator):
     bl_description = "Remove the delay effect from the selected bone(s)."
             
     def execute(self, context):
+        #make sure empties are enabled to avoid null error
+        originalEmptyVisibility = context.space_data.show_object_viewport_empty
+        context.space_data.show_object_viewport_empty = True
+        
         #speed up processing by setting simplify
         context.scene.render.use_simplify = True
         context.scene.render.simplify_subdivision = 0
@@ -340,12 +357,16 @@ class JSPLINE_OT_RevertBone(bpy.types.Operator):
             bpy.ops.object.posemode_toggle()
         #turn off simplify after processing
         context.scene.render.use_simplify = False
+        
+        #return empty visibility to user set state after processing
+        context.space_data.show_object_viewport_empty = originalEmptyVisibility
+        
         return {'FINISHED'}
     
 #button to keyframe the selected influence for the selected bone(s) at the current time
 class JSPLINE_OT_KeyInfluence(bpy.types.Operator):
     bl_idname = "jspline.keyinfluence"
-    bl_label = "Keyframe Influence For Selected Bone(s)."
+    bl_label = "Keyframe Influence For Selected Bone(s)"
     bl_description = "Keyframe the specified effect influence for the selected bone(s) at the current time."
     def execute(self, context):
         for bone in range(len(context.selected_pose_bones)):
@@ -361,7 +382,7 @@ class JSPLINE_OT_KeyInfluence(bpy.types.Operator):
 #button to keyframe no effect for the selected bone(s) at the current time
 class JSPLINE_OT_KeyDisable(bpy.types.Operator):
     bl_idname = "jspline.keydisable"
-    bl_label = "Keyframe No Effect For Selected Bone(s)."
+    bl_label = "Keyframe No Effect For Selected Bone(s)"
     bl_description = "Insert a keyframe to disable the effect on the selected bone(s) at the current time."
     def execute(self, context):
         for bone in range(len(context.selected_pose_bones)):
@@ -373,6 +394,27 @@ class JSPLINE_OT_KeyDisable(bpy.types.Operator):
                 targetBone.constraints["JSPLINE_RotateDelayEffect"].influence = 0
                 targetBone.constraints["JSPLINE_RotateDelayEffect"].keyframe_insert(data_path="influence",frame=context.scene.frame_current)
         return {'FINISHED'}
+    
+#button to create looping animation influence envelope
+class JSPLINE_OT_KeyInfluenceEnvelope(bpy.types.Operator):
+    bl_idname = "jspline.keyenvelope"
+    bl_label = "Keyframe Envelope For Selected Bone(s)"
+    bl_description = "Create keyframes with no influence at the start and end of the timeline, with one or two full influence keys in between for looping animations. Uses the 'Looping Envelope Timeline Percent' to determine keyframe placement"
+    def execute(self, context):
+        envelopePercent = context.scene.JSPLINEEnvelopePercent / 100
+        originalTimelinePosition = context.scene.frame_current
+        timelineLength = context.scene.frame_end - context.scene.frame_start
+        startEnvelopeKeyframe = context.scene.frame_start + math.ceil(timelineLength * envelopePercent)
+        endEnvelopeKeyframe = context.scene.frame_end - math.ceil(timelineLength * envelopePercent)
+        context.scene.frame_set(context.scene.frame_start)
+        bpy.ops.jspline.keydisable()
+        context.scene.frame_set(context.scene.frame_end)
+        bpy.ops.jspline.keydisable()
+        context.scene.frame_set(startEnvelopeKeyframe)
+        bpy.ops.jspline.keyinfluence()
+        context.scene.frame_set(endEnvelopeKeyframe)
+        bpy.ops.jspline.keyinfluence()
+        return {'FINISHED'}
 
 #register and unregister all Jeane Spline classes
 jsplineClasses = (  JSPLINE_PT_SpliningPanel,
@@ -380,7 +422,8 @@ jsplineClasses = (  JSPLINE_PT_SpliningPanel,
                     JSPLINE_OT_SmoothBone,
                     JSPLINE_OT_RevertBone,
                     JSPLINE_OT_KeyInfluence,
-                    JSPLINE_OT_KeyDisable)
+                    JSPLINE_OT_KeyDisable,
+                    JSPLINE_OT_KeyInfluenceEnvelope)
 
 register, unregister = bpy.utils.register_classes_factory(jsplineClasses)
 
