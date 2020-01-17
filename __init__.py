@@ -190,18 +190,42 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
 
         #fix normals and apply loop if required
         bpy.ops.curve.select_all(action='SELECT')
-        if(loopAnimation == True):
-            bpy.ops.curve.cyclic_toggle()
-            bpy.ops.curve.select_all(action='DESELECT')
-            currentSpline.points[0].select = True
-            bpy.ops.curve.delete(type='VERT')
-            bpy.ops.curve.select_all(action='SELECT')
+#        if(loopAnimation == True):
+#            bpy.ops.curve.cyclic_toggle()
+#            bpy.ops.curve.select_all(action='DESELECT')
+#            currentSpline.points[0].select = True
+#            bpy.ops.curve.delete(type='VERT')
+#            bpy.ops.curve.select_all(action='SELECT')
         currentSpline.use_bezier_u = True
         currentSpline.use_bezier_u = False
         currentSpline.order_u = 4
         currentSpline.use_endpoint_u = True
         bpy.ops.object.editmode_toggle()
-                
+    
+    #pinch together the ends of motion curve segments
+    def joinCurveSegments(self, context, pathSegmentList, loopingAnimation):
+        bpy.ops.object.select_all(action='DESELECT')
+        for selectPathSegment in pathSegmentList:
+            selectPathSegment.select_set(True)
+            
+        bpy.ops.object.editmode_toggle()
+        context.scene.tool_settings.transform_pivot_point = 'BOUNDING_BOX_CENTER'
+        for curveObjectNumber in range(0,len(bpy.context.selected_objects)):
+            if(curveObjectNumber < len(bpy.context.selected_objects)-1):
+                bpy.ops.curve.select_all(action='DESELECT')
+                firstCurvePoint = bpy.context.selected_objects[curveObjectNumber]
+                secondCurvePoint = bpy.context.selected_objects[curveObjectNumber+1]
+                firstCurvePoint.data.splines[0].points[0].select = True
+                secondCurvePoint.data.splines[0].points[-1].select = True
+                bpy.ops.transform.resize(value=(0,0,0))
+        if(loopingAnimation == True):
+            bpy.ops.curve.select_all(action='DESELECT')
+            bpy.context.selected_objects[-1].data.splines[0].points[0].select = True
+            bpy.context.selected_objects[0].data.splines[0].points[-1].select = True
+            bpy.ops.transform.resize(value=(0,0,0))
+        bpy.ops.object.editmode_toggle()
+        
+    #create curves from motion
     def execute(self, context):
         #currently selected objects which paths need to be made for
         objectsForPaths = None
@@ -362,31 +386,22 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 objectRotatePath = self.setupBezierCurve(context,rotatePathSegmentName)
                 self.computeCurveShape(context,captureInterval,minimumRotateDistance,objectRotatePath,objectRotateEmpty,loopAnimation)
                 self.assignToCollection(context,objectCollectionName,objectRotatePath)
-                rotatePathSegmentList.append(objectMovePath)
+                rotatePathSegmentList.append(objectRotatePath)
                 
                 #pole paths
                 objectPolePath = self.setupBezierCurve(context,polePathSegmentName)
                 self.computeCurveShape(context,captureInterval,minimumPoleDistance,objectPolePath,objectPoleEmpty,loopAnimation)
                 self.assignToCollection(context,objectCollectionName,objectPolePath)
-                polePathSegmentList.append(objectMovePath)
+                polePathSegmentList.append(objectPolePath)
             
             #join path segment ends
             #movement paths
-            bpy.ops.object.select_all(action='DESELECT')
-            for movePathSegment in movePathSegmentList:
-                movePathSegment.select_set(True)
+            self.joinCurveSegments(context, movePathSegmentList, loopAnimation)
+            #rotation paths
+            self.joinCurveSegments(context, rotatePathSegmentList, loopAnimation)
+            #pole paths
+            self.joinCurveSegments(context, polePathSegmentList, loopAnimation)
             
-            bpy.ops.object.editmode_toggle()
-            context.scene.tool_settings.transform_pivot_point = 'BOUNDING_BOX_CENTER'
-            for curveObjectNumber in range(0,len(bpy.context.selected_objects)):
-                if(curveObjectNumber < len(bpy.context.selected_objects)-1):
-                    bpy.ops.curve.select_all(action='DESELECT')
-                    firstCurvePoint = bpy.context.selected_objects[curveObjectNumber]
-                    secondCurvePoint = bpy.context.selected_objects[curveObjectNumber+1]
-                    firstCurvePoint.data.splines[0].points[0].select = True
-                    secondCurvePoint.data.splines[0].points[-1].select = True
-                    bpy.ops.transform.resize(value=(0,0,0))
-                    
             
             
             #reset timeline to original length
