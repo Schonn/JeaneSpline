@@ -49,7 +49,7 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
-        self.layout.operator('empathy.placecurvemarker', text ='Place Curve Split Marker At Current Time') 
+        self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
         
@@ -69,7 +69,7 @@ class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
-        self.layout.operator('empathy.placecurvemarker', text ='Place Curve Split Marker At Current Time') 
+        self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
 
@@ -327,19 +327,12 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         
         #step through all selected objects and assign to motion paths
         for pathingObject in objectsForPaths: #may be bones or objects
-            #determine how many split markers exist for the pathing object
-            splitMarkerList = []
-            for splitMarkerName in context.scene.timeline_markers.keys():
-                if(context.scene.timeline_markers[splitMarkerName].frame != context.scene.frame_start and
-                    context.scene.timeline_markers[splitMarkerName].frame != context.scene.frame_end):
-                    #for bones
-                    if(isUsingBones):
-                        if(activeArmature.name in splitMarkerName and pathingObject.name in splitMarkerName):
-                            splitMarkerList.append(context.scene.timeline_markers[splitMarkerName].frame)
-                    else:
-                        if(pathingObject.name in splitMarkerName):
-                            splitMarkerList.append(context.scene.timeline_markers[splitMarkerName].frame)
-            
+            #determine how many split frames exist for the object
+            #if none, do a basic split setup
+            if not("EMP_SPLIT_FRAMES" in pathingObject):
+                context.scene.frame_set(int(context.scene.frame_end/2))
+                bpy.ops.empathy.markcurvesplitframe()
+            splitMarkerList = pathingObject["EMP_SPLIT_FRAMES"].to_list()
             
             bpy.ops.object.select_all(action='DESELECT')
             
@@ -405,34 +398,17 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             
             #create path segments between each split point by setting the timeline duration to the
             originalTimelineRange = [context.scene.frame_start,context.scene.frame_end]
-            splitMarkerList.insert(originalTimelineRange[0],0)
-            if(len(splitMarkerList) < 2): #there must be at least one split to function, automatically create one if need be
-                bpy.ops.object.select_all(action='DESELECT')
-                pathingObject.select_set(True)
-                context.scene.frame_set(round(originalTimelineRange[1]/2))
-                bpy.ops.empathy.placecurvemarker()
-                splitMarkerList.append(context.scene.frame_current)
-            splitMarkerList = sorted(splitMarkerList) #splits must be in order to avoid chaos
-            print(splitMarkerList)  
-            pathSegmentCount = len(splitMarkerList)+1
+            print("split marker list is " + str(splitMarkerList))
+            pathSegmentCount = len(splitMarkerList)
             movePathSegmentList = [] #segment lists for joining path segment end points
             rotatePathSegmentList = []
             polePathSegmentList = []
-            for pathSegmentNumber in range(1,pathSegmentCount):
+            for pathSegmentNumber in range(0,pathSegmentCount-1):
                 movePathSegmentName = movePathName + "_Segment" + str(pathSegmentNumber)
                 rotatePathSegmentName = rotatePathName + "_Segment" + str(pathSegmentNumber)
                 polePathSegmentName = polePathName + "_Segment" + str(pathSegmentNumber)
-                pathSegmentStartFrame = originalTimelineRange[0]
-                pathSegmentEndFrame = originalTimelineRange[1]
-                if(pathSegmentCount > 1): #a path segment count of 1 means no usable curve split markers
-                    if(pathSegmentNumber == 1): #first path segment is from frame start to marker
-                        pathSegmentEndFrame = splitMarkerList[pathSegmentNumber]
-                    elif(pathSegmentNumber == len(splitMarkerList)):
-                        pathSegmentStartFrame = splitMarkerList[pathSegmentNumber-1]
-                        pathSegmentEndFrame = originalTimelineRange[1]
-                    else:
-                        pathSegmentStartFrame = splitMarkerList[pathSegmentNumber-1]
-                        pathSegmentEndFrame = splitMarkerList[pathSegmentNumber]
+                pathSegmentStartFrame = splitMarkerList[pathSegmentNumber]
+                pathSegmentEndFrame = splitMarkerList[pathSegmentNumber+1]
                 print("creating path segment " + movePathSegmentName + " from " + str(pathSegmentStartFrame) + "to" + str(pathSegmentEndFrame))
                 context.scene.frame_start = pathSegmentStartFrame
                 context.scene.frame_end = pathSegmentEndFrame
@@ -531,20 +507,18 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         
         return {'FINISHED'}
     
-#button to create timeline markers to define the beginning and end of curve segments
-class EMPATHY_OT_PlaceCurveSegmentMarker(bpy.types.Operator):
-    bl_idname = "empathy.placecurvemarker"
-    bl_label = "Place curve split timeline marker for current objects"
-    bl_description = "Place a timeline marker at the current time to define a split point in generated curves for the selected objects"
-    
-    #get the next highest marker number for distinct marker numbering
-    def findNextHighestMarkerNumber(self, context):
-        maxMarkerNumber = 0 #find next highest marker number
-        for timelineMarkerName in context.scene.timeline_markers.keys():
-            currentMarkerNumber = timelineMarkerName.split("_")
-            if(int(currentMarkerNumber[-1]) > maxMarkerNumber):
-                maxMarkerNumber = int(currentMarkerNumber[-1])
-        return maxMarkerNumber
+#button to add frames to the selected object's split frame array for splitting the generated curves
+class EMPATHY_OT_MarkCurveSplitFrame(bpy.types.Operator):
+    bl_idname = "empathy.markcurvesplitframe"
+    bl_label = "Mark curve split at current time"
+    bl_description = "Add the current frame as a point where the curve will be split for the selected object"
+
+    def addValueToPropListIfNotExists(self,context,newValue,objectWithList):
+        if not(newValue in objectWithList["EMP_SPLIT_FRAMES"]):
+            splitFrameList = objectWithList["EMP_SPLIT_FRAMES"].to_list()
+            splitFrameList.append(newValue)
+            splitFrameList = sorted(splitFrameList)
+            objectWithList["EMP_SPLIT_FRAMES"] = splitFrameList
     
     def execute(self, context):
         #currently selected objects to place curve segment markers for
@@ -562,20 +536,21 @@ class EMPATHY_OT_PlaceCurveSegmentMarker(bpy.types.Operator):
             
         #step through all selected objects and create a curve segment marker for them at the current time
         for pathingObject in objectsForPaths: #may be bones or objects
-            #for bones
-            nextMarkerNumber = self.findNextHighestMarkerNumber(context) + 1
-            if(isUsingBones == True):
-                context.scene.timeline_markers.new(name = "EMP_SPT_" + activeArmature.name + "_" + pathingObject.name + "_" + str(nextMarkerNumber),frame = bpy.context.scene.frame_current)
-            else:
-                context.scene.timeline_markers.new(name = "EMP_SPT_" + pathingObject.name + "_" + str(nextMarkerNumber),frame = bpy.context.scene.frame_current)
-        return {'FINISHED'}
+            if not("EMP_SPLIT_FRAMES" in pathingObject): #set up split frame list if not created
+                pathingObject["EMP_SPLIT_FRAMES"] = []
+            #add start and end of scene to split frame list if not already added
+            self.addValueToPropListIfNotExists(context,context.scene.frame_start,pathingObject)
+            self.addValueToPropListIfNotExists(context,context.scene.frame_end,pathingObject)
+            self.addValueToPropListIfNotExists(context,context.scene.frame_current,pathingObject)
 
+        return {'FINISHED'}
+    
 #register and unregister all Empathy classes
 empathyClasses = (  EMPATHY_PT_MenuPanel,
                     EMPATHY_PT_MenuPanelPose,
                     EMPATHY_OT_CreateObjectPaths,
                     EMPATHY_OT_ClearPathsFromSelected,
-                    EMPATHY_OT_PlaceCurveSegmentMarker)
+                    EMPATHY_OT_MarkCurveSplitFrame)
 
 register, unregister = bpy.utils.register_classes_factory(empathyClasses)
 
