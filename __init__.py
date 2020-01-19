@@ -37,8 +37,8 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
     bl_label = 'Delayed Motion Paths'
     bl_context = 'objectmode'
     bl_category = 'Empty Motion Path'
-    bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="how many frames to wait between capturing a location for a bezier curve motion path",default=5,min=1)
-    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="how many frames to wait between capturing a location for a bezier curve motion path",default=2,min=1)
+    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.0,min=0)
     bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="the closest that two points can be in a rotation bezier curve motion path",default=0.2,min=0)
     bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="the closest that two points can be in a pole bezier curve motion path",default=0.2,min=0)
     bpy.types.Scene.EMPATHYLoopedAnimation = bpy.props.BoolProperty(name="Loop Motion Path",description="make bezier curve motion path cyclic before smoothing for looping animation",default=False)
@@ -115,6 +115,8 @@ class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
             for constraintToRemove in pathedObject.constraints:
                 if("EMPATHY_" in constraintToRemove.name):
                     pathedObject.constraints.remove(constraintToRemove)
+            if(isUsingBones):
+                bpy.ops.object.posemode_toggle()
                     
         return {'FINISHED'}
 
@@ -228,6 +230,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         for selectPathSegment in pathSegmentList:
             selectPathSegment.select_set(True)
+            context.view_layer.objects.active = selectPathSegment
             
         bpy.ops.object.editmode_toggle()
         context.scene.tool_settings.transform_pivot_point = 'BOUNDING_BOX_CENTER'
@@ -334,7 +337,16 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             #if none, do a basic split setup
             if not("EMP_SPLIT_FRAMES" in pathingObject):
                 context.scene.frame_set(int(context.scene.frame_end/2))
-                bpy.ops.empathy.markcurvesplitframe()
+                #for bones
+                if(isUsingBones):
+                    bpy.ops.object.select_all(action='DESELECT')
+                    activeArmature.select_set(True)
+                    context.view_layer.objects.active = activeArmature
+                    bpy.ops.object.posemode_toggle()
+                    bpy.ops.empathy.markcurvesplitframe()
+                    bpy.ops.object.posemode_toggle()
+                else:
+                    bpy.ops.empathy.markcurvesplitframe()
             pathingObject["EMP_SPLIT_FRAMES"] = sorted(pathingObject["EMP_SPLIT_FRAMES"].to_list())
             splitMarkerList = sorted(pathingObject["EMP_SPLIT_FRAMES"].to_list())
             
@@ -508,6 +520,12 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
          
         context.scene.tool_settings.use_keyframe_insert_auto = originalKeyframeInsertState
         context.scene.frame_set(originalKeyframePosition)
+        
+        if(isUsingBones):
+            bpy.ops.object.select_all(action='DESELECT')
+            activeArmature.select_set(True)
+            context.view_layer.objects.active = activeArmature
+            bpy.ops.object.posemode_toggle()
         
         return {'FINISHED'}
     
