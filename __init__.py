@@ -168,20 +168,20 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         return longestPointDistance
     
     def computeCurveShape(self,context,captureInterval,minimumDistance,pathToEdit,pathingObject,loopAnimation):
-        print("computing curve shape for" + pathingObject.name)
+        #print("computing curve shape for" + pathingObject.name)
         context.scene.frame_set(context.scene.frame_start)
         maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
         if(maxKeyFrameNumber <= 1): # do not allow a keyframe capture interval that is too big resulting in no keyframes captured
             captureInterval = 2
             maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
-        print("max key frame number is " + str(maxKeyFrameNumber))
+        #print("max key frame number is " + str(maxKeyFrameNumber))
         for recordKeyFramePoint in range(0,maxKeyFrameNumber):
             if(recordKeyFramePoint == maxKeyFrameNumber):
                 context.scene.frame_set(context.scene.frame_end)
             elif(recordKeyFramePoint != 0):
                 context.scene.frame_set(context.scene.frame_current + captureInterval)
             pathToEdit.data.splines[0].points[0].co.xyz = pathingObject.matrix_world.translation
-            print("setting path point" + str(pathingObject.matrix_world.translation))
+            #print("setting path point" + str(pathingObject.matrix_world.translation))
             if(recordKeyFramePoint != maxKeyFrameNumber):
                 bpy.ops.curve.extrude()
                 
@@ -191,10 +191,9 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         pointDistanceMinimum = minimumDistance
         #make sure that the minimum path point distance is small enough to retain points
         longestPathPointDistance = self.getLongestPathPointDistance(context, currentSpline)
-        if(longestPathPointDistance < 0.01):
-            pointDistanceMinimum = 0
-        elif(longestPathPointDistance <= pointDistanceMinimum):
-            pointDistanceMinimum = longestPathPointDistance*0.5
+        if(longestPathPointDistance <= pointDistanceMinimum):
+            pointDistanceMinimum = longestPathPointDistance
+        print(str(longestPathPointDistance) + " with minimum " + str(pointDistanceMinimum))
         #iterate through curve points and delete points which are too close
         for curvePointNumber in range(len(currentSpline.points)):
             pointDistanceTooSmall = False
@@ -211,6 +210,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             #if the distance between points is too small, mark for deletion
             if(pointDistanceTooSmall == True and curvePointNumber != 0):
                 currentSpline.points[curvePointNumber].select = True
+        currentSpline.points[-1].select = False
+        currentSpline.points[1].select = False
         #delete points which are too close
         bpy.ops.curve.delete(type='VERT')
 
@@ -299,7 +300,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         isUsingBones = False
         activeArmature = None
         if(context.active_object.mode == 'POSE'):
-            print("using bones")
+            #print("using bones")
             isUsingBones = True
             objectsForPaths = context.selected_pose_bones_from_active_object
         else:
@@ -335,7 +336,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 context.scene.frame_set(int(context.scene.frame_end/2))
                 bpy.ops.empathy.markcurvesplitframe()
             pathingObject["EMP_SPLIT_FRAMES"] = sorted(pathingObject["EMP_SPLIT_FRAMES"].to_list())
-            splitMarkerList = pathingObject["EMP_SPLIT_FRAMES"]
+            splitMarkerList = sorted(pathingObject["EMP_SPLIT_FRAMES"].to_list())
             
             bpy.ops.object.select_all(action='DESELECT')
             
@@ -401,7 +402,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             
             #create path segments between each split point by setting the timeline duration to the
             originalTimelineRange = [context.scene.frame_start,context.scene.frame_end]
-            print("split marker list is " + str(splitMarkerList))
+            #print("split marker list is " + str(splitMarkerList))
             pathSegmentCount = len(splitMarkerList)
             movePathSegmentList = [] #segment lists for joining path segment end points
             rotatePathSegmentList = []
@@ -530,7 +531,7 @@ class EMPATHY_OT_MarkCurveSplitFrame(bpy.types.Operator):
         isUsingBones = False
         activeArmature = None
         if(context.active_object.mode == 'POSE'):
-            print("using bones")
+            #print("using bones")
             isUsingBones = True
             objectsForPaths = context.selected_pose_bones_from_active_object
             activeArmature = context.active_object
@@ -561,7 +562,7 @@ class EMPATHY_OT_ClearCurveSplitFrames(bpy.types.Operator):
         isUsingBones = False
         activeArmature = None
         if(context.active_object.mode == 'POSE'):
-            print("using bones")
+            #print("using bones")
             isUsingBones = True
             objectsForPaths = context.selected_pose_bones_from_active_object
             activeArmature = context.active_object
