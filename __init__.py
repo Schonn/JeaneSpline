@@ -315,7 +315,6 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                     else:
                         if(pathingObject.name in splitMarkerName):
                             splitMarkerList.append(context.scene.timeline_markers[splitMarkerName].frame)
-            print("marker list is " + str(splitMarkerList))
             
             
             bpy.ops.object.select_all(action='DESELECT')
@@ -383,6 +382,14 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             #create path segments between each split point by setting the timeline duration to the
             originalTimelineRange = [context.scene.frame_start,context.scene.frame_end]
             splitMarkerList.insert(originalTimelineRange[0],0)
+            if(len(splitMarkerList) < 2): #there must be at least one split to function, automatically create one if need be
+                bpy.ops.object.select_all(action='DESELECT')
+                pathingObject.select_set(True)
+                context.scene.frame_set(round(originalTimelineRange[1]/2))
+                bpy.ops.empathy.placecurvemarker()
+                splitMarkerList.append(context.scene.frame_current)
+            splitMarkerList = sorted(splitMarkerList) #splits must be in order to avoid chaos
+            print(splitMarkerList)  
             pathSegmentCount = len(splitMarkerList)+1
             movePathSegmentList = [] #segment lists for joining path segment end points
             rotatePathSegmentList = []
