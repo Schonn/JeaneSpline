@@ -242,7 +242,10 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         #do not mute constraint if the end of this curve segment frame range is the end of the whole animation
         if(context.scene.frame_end != originalTimelineRange[1]): 
             pathConstraint.mute=True
-        pathConstraint.keyframe_insert(data_path = 'offset_factor')
+            pathConstraint.keyframe_insert(data_path = 'offset_factor')
+        else:
+            pathConstraint.mute=False
+            pathConstraint.keyframe_insert(data_path = 'offset_factor',frame=context.scene.frame_current+1)
         pathConstraint.keyframe_insert(data_path = 'mute') #mute after end of path segment to allow next path segment to take over
         #pinch handles on keyframes to make start and end points behave linear
         for fcurveData in controlEmpty.animation_data.action.fcurves:
