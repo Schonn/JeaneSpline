@@ -190,12 +190,6 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
 
         #fix normals and apply loop if required
         bpy.ops.curve.select_all(action='SELECT')
-#        if(loopAnimation == True):
-#            bpy.ops.curve.cyclic_toggle()
-#            bpy.ops.curve.select_all(action='DESELECT')
-#            currentSpline.points[0].select = True
-#            bpy.ops.curve.delete(type='VERT')
-#            bpy.ops.curve.select_all(action='SELECT')
         currentSpline.use_bezier_u = True
         currentSpline.use_bezier_u = False
         currentSpline.order_u = 4
@@ -224,7 +218,40 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             bpy.context.selected_objects[0].data.splines[0].points[-1].select = True
             bpy.ops.transform.resize(value=(0,0,0))
         bpy.ops.object.editmode_toggle()
-        
+    
+    #animate follow path constraints for a given empty and set of curves
+    def constrainAndAnimateCurveSegments(self, context, pathConstraintName, controlEmpty, pathSegmentNumber, pathSegmentObject, originalTimelineRange):
+        #motion tracking along path
+        pathConstraint = controlEmpty.constraints.new(type='FOLLOW_PATH')
+        pathConstraint.name = pathConstraintName + "_Segment" + str(pathSegmentNumber)
+        pathConstraint.target = pathSegmentObject
+        pathConstraint.use_fixed_location = True
+        context.scene.frame_set(context.scene.frame_start-1)
+        pathConstraint.mute=True
+        pathConstraint.keyframe_insert(data_path = 'mute') #make constraint start muted
+        context.scene.frame_set(context.scene.frame_start)
+        pathConstraint.mute=False
+        pathConstraint.offset_factor = 1
+        pathConstraint.keyframe_insert(data_path = 'offset_factor')
+        pathConstraint.keyframe_insert(data_path = 'mute') #make constraint start at path start unmuted
+        context.scene.frame_set(context.scene.frame_end-1)
+        pathConstraint.mute=False
+        pathConstraint.keyframe_insert(data_path = 'mute')#make sure that muting is switched on and off at correct time
+        context.scene.frame_set(context.scene.frame_end)
+        pathConstraint.offset_factor = 0
+        #do not mute constraint if the end of this curve segment frame range is the end of the whole animation
+        if(context.scene.frame_end != originalTimelineRange[1]): 
+            pathConstraint.mute=True
+        pathConstraint.keyframe_insert(data_path = 'offset_factor')
+        pathConstraint.keyframe_insert(data_path = 'mute') #mute after end of path segment to allow next path segment to take over
+        #pinch handles on keyframes to make start and end points behave linear
+        for fcurveData in controlEmpty.animation_data.action.fcurves:
+            for keyframePoint in fcurveData.keyframe_points:
+                keyframePoint.handle_left_type = 'FREE'
+                keyframePoint.handle_right_type = 'FREE'
+                keyframePoint.handle_left = keyframePoint.co
+                keyframePoint.handle_right = keyframePoint.co
+                
     #create curves from motion
     def execute(self, context):
         #currently selected objects which paths need to be made for
@@ -375,6 +402,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 print("creating path segment " + movePathSegmentName + " from " + str(pathSegmentStartFrame) + "to" + str(pathSegmentEndFrame))
                 context.scene.frame_start = pathSegmentStartFrame
                 context.scene.frame_end = pathSegmentEndFrame
+                
                 #create and compute paths
                 #movement paths
                 objectMovePath = self.setupBezierCurve(context,movePathSegmentName)
@@ -394,36 +422,19 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 self.assignToCollection(context,objectCollectionName,objectPolePath)
                 polePathSegmentList.append(objectPolePath)
                 
-                #motion tracking along path
-                movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
-                movePathConstraint.name = followPathConstraintName + "_Segment" + str(pathSegmentNumber)
-                movePathConstraint.target = objectMovePath
-                movePathConstraint.use_fixed_location = True
-                context.scene.frame_set(context.scene.frame_start-1)
-                movePathConstraint.mute=True
-                movePathConstraint.keyframe_insert(data_path = 'mute') #make constraint start muted
-                context.scene.frame_set(context.scene.frame_start)
-                movePathConstraint.mute=False
-                movePathConstraint.offset_factor = 1
-                movePathConstraint.keyframe_insert(data_path = 'offset_factor')
-                movePathConstraint.keyframe_insert(data_path = 'mute') #make constraint start at path start unmuted
-                context.scene.frame_set(context.scene.frame_end-1)
-                movePathConstraint.mute=False
-                movePathConstraint.keyframe_insert(data_path = 'mute')#make sure that muting is switched on and off at correct time
-                context.scene.frame_set(context.scene.frame_end)
-                movePathConstraint.offset_factor = 0
-                movePathConstraint.mute=True
-                movePathConstraint.keyframe_insert(data_path = 'offset_factor')
-                movePathConstraint.keyframe_insert(data_path = 'mute') #mute after end of path segment to allow next path segment to take over
-                #pinch handles on keyframes to make start and end points behave linear
-                for fcurveData in objectMoveEmpty.animation_data.action.fcurves:
-                    for keyframePoint in fcurveData.keyframe_points:
-                        keyframePoint.handle_left_type = 'FREE'
-                        keyframePoint.handle_right_type = 'FREE'
-                        keyframePoint.handle_left = keyframePoint.co
-                        keyframePoint.handle_right = keyframePoint.co
-            
-            
+                
+                #create constraints and animations for paths
+                
+                #movement paths
+                self.constrainAndAnimateCurveSegments(context, followPathConstraintName, objectMoveEmpty, pathSegmentNumber, objectMovePath, originalTimelineRange)
+               
+                #rotation paths
+                self.constrainAndAnimateCurveSegments(context, followPathConstraintName, objectRotateEmpty, pathSegmentNumber, objectRotatePath, originalTimelineRange)
+                
+                #pole paths
+                self.constrainAndAnimateCurveSegments(context, followPathConstraintName, objectPoleEmpty, pathSegmentNumber, objectPolePath, originalTimelineRange)
+                
+ 
             #join path segment ends
             #movement paths
             self.joinCurveSegments(context, movePathSegmentList, loopAnimation)
@@ -441,86 +452,46 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             for constraintToRemove in objectMoveEmpty.constraints:
                 if("EMPATHY_TEMPTRANSFORMCONSTRAINT" in constraintToRemove.name):
                     objectMoveEmpty.constraints.remove(constraintToRemove)
+                    
+            #clear parents for rotation and pole to make them stick to their paths
+            objectRotateEmpty.parent = None
+            objectRotateEmpty.location = (0,0,0)
+            objectPoleEmpty.parent = None
+            objectPoleEmpty.location = (0,0,0)
+                       
+            #prevent object rotating as a result of the original motion
+            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
+            cancelRotationConstraint.name = cancelRotationConstraintName
+            cancelRotationConstraint.target = objectMoveEmpty
             
-#            #enable rotation tracking on object
-#            objectRotateEmpty.parent = None
-#            objectRotateEmpty.location = (0,0,0)
-#            rotatePathConstraint = objectRotateEmpty.constraints.new(type='FOLLOW_PATH')
-#            rotatePathConstraint.name = followPathConstraintName
-#            rotatePathConstraint.target = objectRotatePath
-#            rotatePathConstraint.use_fixed_location = True
-#            
-#            #enable pole tracking on object
-#            objectPoleEmpty.parent = None
-#            objectPoleEmpty.location = (0,0,0)
-#            polePathConstraint = objectPoleEmpty.constraints.new(type='FOLLOW_PATH')
-#            polePathConstraint.name = followPathConstraintName
-#            polePathConstraint.target = objectPolePath
-#            polePathConstraint.use_fixed_location = True
-#            
-#            #motion tracking along path
-#            objectMoveEmpty.parent = None
-#            objectMoveEmpty.location = (0,0,0)
-#            movePathConstraint = objectMoveEmpty.constraints.new(type='FOLLOW_PATH')
-#            movePathConstraint.name = followPathConstraintName
-#            movePathConstraint.target = objectMovePath
-#            movePathConstraint.use_fixed_location = True
-#            
-##            #prevent object rotating as a result of the original motion
-##            cancelRotationConstraint = pathingObject.constraints.new(type='COPY_ROTATION')
-##            cancelRotationConstraint.name = cancelRotationConstraintName
-##            cancelRotationConstraint.target = objectMoveEmpty
-#            
-#            #constrain object to movement empty
-#            copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
-#            copyMoveLocationConstraint.name = copyLocationConstraintName
-#            copyMoveLocationConstraint.target = objectMoveEmpty
-#            copyMoveLocationConstraint.influence = 1
-#            
-#            #create tracking constraints with pole to follow rotation empties
-#            rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-#            rotatePitchTrackConstraint.name = rotatePitchTrackConstraintName
-#            rotatePitchTrackConstraint.target = objectRotateEmpty
-#            rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
-#            rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
-#            rotatePitchTrackConstraint.influence = 1
-#            
-#            rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-#            rotateYawTrackConstraint.name = rotateYawTrackConstraintName
-#            rotateYawTrackConstraint.target = objectRotateEmpty
-#            rotateYawTrackConstraint.track_axis = 'TRACK_Y'
-#            rotateYawTrackConstraint.lock_axis = 'LOCK_X'
-#            rotateYawTrackConstraint.influence = 1
-#            
-#            poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
-#            poleTrackConstraint.name = poleTrackConstraintName
-#            poleTrackConstraint.target = objectPoleEmpty
-#            poleTrackConstraint.track_axis = 'TRACK_Z'
-#            poleTrackConstraint.lock_axis = 'LOCK_Y'
-#            poleTrackConstraint.influence = 1
-#            
-#            #put path empties in a list for iterating through the creation and adjustment of path follow keyframes
-#            controlEmptyList = [objectRotateEmpty,objectMoveEmpty,objectPoleEmpty]
-#            
-#            for controlEmptyType in controlEmptyList:
-#                #create motion keyframes
-#                context.scene.frame_set(context.scene.frame_start)
-#                controlEmptyType.constraints[followPathConstraintName].offset_factor = 1
-#                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
-#                if(loopAnimation == True):
-#                    context.scene.frame_set(context.scene.frame_end + 1)
-#                else:
-#                    context.scene.frame_set(context.scene.frame_end)
-#                controlEmptyType.constraints[followPathConstraintName].offset_factor = 0
-#                controlEmptyType.constraints[followPathConstraintName].keyframe_insert(data_path = 'offset_factor')
-#                
-#                #pinch handles on keyframes to make start and end points behave linear
-#                for keyframePointNumber in range(0,2):
-#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left_type = 'FREE'
-#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right_type = 'FREE'
-#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_left = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
-#                    controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].handle_right = controlEmptyType.animation_data.action.fcurves[0].keyframe_points[keyframePointNumber].co
-#                    
+            #constrain object to movement empty
+            copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
+            copyMoveLocationConstraint.name = copyLocationConstraintName
+            copyMoveLocationConstraint.target = objectMoveEmpty
+            copyMoveLocationConstraint.influence = 1
+            
+            #create tracking constraints with pole to follow rotation empties
+            rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotatePitchTrackConstraint.name = rotatePitchTrackConstraintName
+            rotatePitchTrackConstraint.target = objectRotateEmpty
+            rotatePitchTrackConstraint.track_axis = 'TRACK_Y'
+            rotatePitchTrackConstraint.lock_axis = 'LOCK_Z'
+            rotatePitchTrackConstraint.influence = 1
+            
+            rotateYawTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            rotateYawTrackConstraint.name = rotateYawTrackConstraintName
+            rotateYawTrackConstraint.target = objectRotateEmpty
+            rotateYawTrackConstraint.track_axis = 'TRACK_Y'
+            rotateYawTrackConstraint.lock_axis = 'LOCK_X'
+            rotateYawTrackConstraint.influence = 1
+            
+            poleTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
+            poleTrackConstraint.name = poleTrackConstraintName
+            poleTrackConstraint.target = objectPoleEmpty
+            poleTrackConstraint.track_axis = 'TRACK_Z'
+            poleTrackConstraint.lock_axis = 'LOCK_Y'
+            poleTrackConstraint.influence = 1
+         
         context.scene.tool_settings.use_keyframe_insert_auto = originalKeyframeInsertState
         context.scene.frame_set(originalKeyframePosition)
         
