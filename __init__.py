@@ -148,12 +148,30 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         bpy.ops.curve.select_all(action='SELECT')
         return pathObject
     
+    #get the longest distance between two points in a path
+    def getLongestPathPointDistance(self, context, currentSpline):
+        longestPointDistance = 0
+        #iterate through curve points and delete points which are too close
+        for curvePointNumber in range(len(currentSpline.points)):
+            if(curvePointNumber - 1 >= 0):
+                previousPointDistance = currentSpline.points[curvePointNumber].co.xyz - currentSpline.points[curvePointNumber - 1].co.xyz
+                distanceDifferenceValue = abs(previousPointDistance[0]) + abs(previousPointDistance[1]) + abs(previousPointDistance[2])
+                if(distanceDifferenceValue > longestPointDistance):
+                    longestPointDistance = distanceDifferenceValue
+            if(curvePointNumber + 1 <= len(currentSpline.points)-1):
+                nextPointDistance = currentSpline.points[curvePointNumber].co.xyz - currentSpline.points[curvePointNumber + 1].co.xyz
+                distanceDifferenceValue = abs(nextPointDistance[0]) + abs(nextPointDistance[1]) + abs(nextPointDistance[2])
+                if(distanceDifferenceValue > longestPointDistance):
+                    longestPointDistance = distanceDifferenceValue
+        return longestPointDistance
+    
     def computeCurveShape(self,context,captureInterval,minimumDistance,pathToEdit,pathingObject,loopAnimation):
         print("computing curve shape for" + pathingObject.name)
         context.scene.frame_set(context.scene.frame_start)
         maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
-        if(maxKeyFrameNumber < 1):
-            maxKeyFrameNumber = 1
+        if(maxKeyFrameNumber <= 1): # do not allow a keyframe capture interval that is too big resulting in no keyframes captured
+            captureInterval = 2
+            maxKeyFrameNumber = int((context.scene.frame_end - context.scene.frame_start) / captureInterval)
         print("max key frame number is " + str(maxKeyFrameNumber))
         for recordKeyFramePoint in range(0,maxKeyFrameNumber):
             if(recordKeyFramePoint == maxKeyFrameNumber):
@@ -169,6 +187,12 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         currentSpline = pathToEdit.data.splines[0]
         #minimum distance for points to need to exist
         pointDistanceMinimum = minimumDistance
+        #make sure that the minimum path point distance is small enough to retain points
+        longestPathPointDistance = self.getLongestPathPointDistance(context, currentSpline)
+        if(longestPathPointDistance < 0.01):
+            pointDistanceMinimum = 0
+        elif(longestPathPointDistance <= pointDistanceMinimum):
+            pointDistanceMinimum = longestPathPointDistance*0.5
         #iterate through curve points and delete points which are too close
         for curvePointNumber in range(len(currentSpline.points)):
             pointDistanceTooSmall = False
