@@ -50,6 +50,7 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
         self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
+        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames For Selected')
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
         
@@ -70,6 +71,7 @@ class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
         self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
+        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames For Selected') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
         self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
 
@@ -332,7 +334,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             if not("EMP_SPLIT_FRAMES" in pathingObject):
                 context.scene.frame_set(int(context.scene.frame_end/2))
                 bpy.ops.empathy.markcurvesplitframe()
-            splitMarkerList = pathingObject["EMP_SPLIT_FRAMES"].to_list()
+            pathingObject["EMP_SPLIT_FRAMES"] = sorted(pathingObject["EMP_SPLIT_FRAMES"].to_list())
+            splitMarkerList = pathingObject["EMP_SPLIT_FRAMES"]
             
             bpy.ops.object.select_all(action='DESELECT')
             
@@ -538,11 +541,36 @@ class EMPATHY_OT_MarkCurveSplitFrame(bpy.types.Operator):
         for pathingObject in objectsForPaths: #may be bones or objects
             if not("EMP_SPLIT_FRAMES" in pathingObject): #set up split frame list if not created
                 pathingObject["EMP_SPLIT_FRAMES"] = []
-            #add start and end of scene to split frame list if not already added
+            #add start, end and current frame to split frame list if not already added
             self.addValueToPropListIfNotExists(context,context.scene.frame_start,pathingObject)
             self.addValueToPropListIfNotExists(context,context.scene.frame_end,pathingObject)
             self.addValueToPropListIfNotExists(context,context.scene.frame_current,pathingObject)
 
+        return {'FINISHED'}
+    
+#button to clear the object's curve split frame array
+class EMPATHY_OT_ClearCurveSplitFrames(bpy.types.Operator):
+    bl_idname = "empathy.clearcurvesplitframes"
+    bl_label = "Clear curve split frames from object"
+    bl_description = "Remove all curve split frames from the selected object"
+
+    def execute(self, context):
+        #currently selected objects to remove curve segment frames from
+        objectsForPaths = None
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(context.active_object.mode == 'POSE'):
+            print("using bones")
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+            activeArmature = context.active_object
+        else:
+            objectsForPaths = context.selected_objects
+            
+        #step through all selected objects and delete all curve split frame data
+        for pathingObject in objectsForPaths: #may be bones or objects
+            pathingObject["EMP_SPLIT_FRAMES"] = [context.scene.frame_start,context.scene.frame_end]
         return {'FINISHED'}
     
 #register and unregister all Empathy classes
@@ -550,7 +578,8 @@ empathyClasses = (  EMPATHY_PT_MenuPanel,
                     EMPATHY_PT_MenuPanelPose,
                     EMPATHY_OT_CreateObjectPaths,
                     EMPATHY_OT_ClearPathsFromSelected,
-                    EMPATHY_OT_MarkCurveSplitFrame)
+                    EMPATHY_OT_MarkCurveSplitFrame,
+                    EMPATHY_OT_ClearCurveSplitFrames)
 
 register, unregister = bpy.utils.register_classes_factory(empathyClasses)
 
