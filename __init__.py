@@ -37,23 +37,27 @@ class EMPATHY_PT_MenuPanel(bpy.types.Panel):
     bl_label = 'Delayed Motion Paths'
     bl_context = 'objectmode'
     bl_category = 'Empty Motion Path'
-    bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="how many frames to wait between capturing a location for a bezier curve motion path",default=2,min=1)
-    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="the closest that two points can be in a movement bezier curve motion path",default=0.0,min=0)
-    bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="the closest that two points can be in a rotation bezier curve motion path",default=0.2,min=0)
-    bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="the closest that two points can be in a pole bezier curve motion path",default=0.2,min=0)
-    bpy.types.Scene.EMPATHYLoopedAnimation = bpy.props.BoolProperty(name="Loop Motion Path",description="make bezier curve motion path cyclic before smoothing for looping animation",default=False)
-
+    bpy.types.Scene.EMPATHYCaptureInterval = bpy.props.IntProperty(name="Capture Interval",description="How many frames to wait between capturing a location for a bezier curve motion path",default=2,min=1)
+    bpy.types.Scene.EMPATHYMinimumMovePointDistance = bpy.props.FloatProperty(name="Minimum Move Point Distance",description="The closest that two points can be in a movement bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYMinimumRotatePointDistance = bpy.props.FloatProperty(name="Minimum Rotate Point Distance",description="The closest that two points can be in a rotation bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYMinimumPolePointDistance = bpy.props.FloatProperty(name="Minimum Pole Point Distance",description="The closest that two points can be in a pole bezier curve motion path",default=0.2,min=0)
+    bpy.types.Scene.EMPATHYLoopedAnimation = bpy.props.BoolProperty(name="Loop Motion Path",description="Make bezier curve motion path cyclic before smoothing for looping animation",default=False)
+    bpy.types.Scene.EMPATHYTranslateInfluence = bpy.props.FloatProperty(name="Translation Influence",description="How much the object will follow the curve for translation",default=1.0,min=0.0,max=1.0)
+    
     def draw(self, context):
         self.layout.prop(context.scene,"EMPATHYLoopedAnimation")
         self.layout.prop(context.scene,"EMPATHYCaptureInterval",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
-        self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
-        self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
-        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames For Selected')
-        self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
-        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
-        
+        self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False) 
+        self.layout.prop(context.scene,"EMPATHYTranslateInfluence",slider=True)
+        self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected')
+        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames From Selected')
+        self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path')
+        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected')
+        self.layout.operator('empathy.editcurvesselected', text ='Edit Paths Associated With Selected')
+        self.layout.operator('empathy.hidecurvesselected', text ='Hide Paths Associated With Selected')
+        self.layout.operator('empathy.showcurvesselected', text ='Show Paths Associated With Selected')
         
 
 #panel class for the empty motion path menu
@@ -70,10 +74,14 @@ class EMPATHY_PT_MenuPanelPose(bpy.types.Panel):
         self.layout.prop(context.scene,"EMPATHYMinimumMovePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumRotatePointDistance",slider=False)
         self.layout.prop(context.scene,"EMPATHYMinimumPolePointDistance",slider=False)
+        self.layout.prop(context.scene,"EMPATHYTranslateInfluence",slider=True)
         self.layout.operator('empathy.markcurvesplitframe', text ='Mark Curve Split Frame For Selected') 
-        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames For Selected') 
+        self.layout.operator('empathy.clearcurvesplitframes', text ='Remove Curve Split Frames From Selected') 
         self.layout.operator('empathy.createobjectpaths', text ='Convert Motion Of Selected To Path') 
-        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected') 
+        self.layout.operator('empathy.clearobjectpaths', text ='Remove Paths Associated With Selected')
+        self.layout.operator('empathy.editcurvesselected', text ='Edit Paths Associated With Selected')
+        self.layout.operator('empathy.hidecurvesselected', text ='Hide Paths Associated With Selected')
+        self.layout.operator('empathy.showcurvesselected', text ='Show Paths Associated With Selected')
 
 #button to create a motion path for the objects and attach the objects to the motion paths
 class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
@@ -117,8 +125,15 @@ class EMPATHY_OT_ClearPathsFromSelected(bpy.types.Operator):
                     pathedObject.constraints.remove(constraintToRemove)
             if(isUsingBones):
                 bpy.ops.object.posemode_toggle()
+            else:
+                for pathingObject in objectsToClear: #for objects only
+                    bpy.ops.object.select_all(action='DESELECT')
+                    pathingObject.select_set(True)
+                    context.view_layer.objects.active = pathingObject
                     
         return {'FINISHED'}
+    
+
 
 #button to create a motion path for the objects and attach the objects to the motion paths
 class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
@@ -295,6 +310,8 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
         minimumRotateDistance = context.scene.EMPATHYMinimumRotatePointDistance
         minimumPoleDistance = context.scene.EMPATHYMinimumPolePointDistance
         loopAnimation = context.scene.EMPATHYLoopedAnimation
+        #influence for translate
+        translateInfluence = context.scene.EMPATHYTranslateInfluence
         #save menu modes to restore after processing
         originalKeyframeInsertState = context.scene.tool_settings.use_keyframe_insert_auto
         originalKeyframePosition = context.scene.frame_current
@@ -459,7 +476,6 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
                 
                 #pole paths
                 self.constrainAndAnimateCurveSegments(context, followPathConstraintName, objectPoleEmpty, pathSegmentNumber, objectPolePath, originalTimelineRange)
-                
  
             #join path segment ends
             #movement paths
@@ -494,7 +510,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             copyMoveLocationConstraint = pathingObject.constraints.new(type='COPY_LOCATION')
             copyMoveLocationConstraint.name = copyLocationConstraintName
             copyMoveLocationConstraint.target = objectMoveEmpty
-            copyMoveLocationConstraint.influence = 1
+            copyMoveLocationConstraint.influence = translateInfluence
             
             #create tracking constraints with pole to follow rotation empties
             rotatePitchTrackConstraint = pathingObject.constraints.new(type='LOCKED_TRACK')
@@ -517,7 +533,7 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             poleTrackConstraint.track_axis = 'TRACK_Z'
             poleTrackConstraint.lock_axis = 'LOCK_Y'
             poleTrackConstraint.influence = 1
-         
+        
         context.scene.tool_settings.use_keyframe_insert_auto = originalKeyframeInsertState
         context.scene.frame_set(originalKeyframePosition)
         
@@ -526,6 +542,14 @@ class EMPATHY_OT_CreateObjectPaths(bpy.types.Operator):
             activeArmature.select_set(True)
             context.view_layer.objects.active = activeArmature
             bpy.ops.object.posemode_toggle()
+        else:
+            for pathingObject in objectsForPaths: #for objects only
+                bpy.ops.object.select_all(action='DESELECT')
+                pathingObject.select_set(True)
+                context.view_layer.objects.active = pathingObject
+                
+        #clean up viewport
+        bpy.ops.empathy.hidecurvesselected()
         
         return {'FINISHED'}
     
@@ -570,8 +594,8 @@ class EMPATHY_OT_MarkCurveSplitFrame(bpy.types.Operator):
 #button to clear the object's curve split frame array
 class EMPATHY_OT_ClearCurveSplitFrames(bpy.types.Operator):
     bl_idname = "empathy.clearcurvesplitframes"
-    bl_label = "Clear curve split frames from object"
-    bl_description = "Remove all curve split frames from the selected object"
+    bl_label = "Clear curve split frames from objects"
+    bl_description = "Remove all curve split frames from the selected objects"
 
     def execute(self, context):
         #currently selected objects to remove curve segment frames from
@@ -592,13 +616,135 @@ class EMPATHY_OT_ClearCurveSplitFrames(bpy.types.Operator):
             pathingObject["EMP_SPLIT_FRAMES"] = [context.scene.frame_start,context.scene.frame_end]
         return {'FINISHED'}
     
+#button to edit the paths associated with the selected objects
+class EMPATHY_OT_EditCurvesSelected(bpy.types.Operator):
+    bl_idname = "empathy.editcurvesselected"
+    bl_label = "Edit curves for selected"
+    bl_description = "Show and edit all curves associated with the selected objects"
+
+    def execute(self, context):
+        #currently selected objects that curve segments will be edited for
+        objectsForPaths = None
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(context.active_object.mode == 'POSE'):
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+            activeArmature = context.active_object
+        else:
+            objectsForPaths = context.selected_objects
+            
+        #select and edit associated objects
+        for pathedObject in objectsForPaths:
+            #for bones
+            editableCollectionName = None
+            if(isUsingBones):
+                activeArmature = context.active_object
+                bpy.ops.object.posemode_toggle()
+                editableCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathedObject.name
+            else:
+                editableCollectionName = "EMPATHY_COMPONENTS_" + pathedObject.name
+            
+            if(editableCollectionName in bpy.data.collections):
+                targetObjectCollection = bpy.data.collections[editableCollectionName]
+                bpy.ops.object.select_all(action='DESELECT')
+                for markEditObject in targetObjectCollection.objects: #select and show all paths and empties
+                    markEditObject.hide_viewport = False
+                    markEditObject.hide_render = False
+                    if("EMPATHY_POLEPATH_" in markEditObject.name or
+                        "EMPATHY_MOVEPATH_" in markEditObject.name or
+                        "EMPATHY_ROTATEPATH_" in markEditObject.name):
+                        markEditObject.select_set(True)
+                        context.view_layer.objects.active = markEditObject
+                bpy.ops.object.editmode_toggle()
+                    
+        return {'FINISHED'}
+    
+#button to hide the paths and empties associated with the selected
+class EMPATHY_OT_HideCurvesSelected(bpy.types.Operator):
+    bl_idname = "empathy.hidecurvesselected"
+    bl_label = "Hide curves for selected"
+    bl_description = "Hide all empties and curves associated with the selected object"
+
+    def execute(self, context):
+        #currently selected objects that curves will be hidden for
+        objectsForPaths = None
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(context.active_object.mode == 'POSE'):
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+            activeArmature = context.active_object
+        else:
+            objectsForPaths = context.selected_objects
+            
+        #select and hide associated objects
+        for pathedObject in objectsForPaths:
+            #for bones
+            associatedCollectionName = None
+            if(isUsingBones):
+                activeArmature = context.active_object
+                associatedCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathedObject.name
+            else:
+                associatedCollectionName = "EMPATHY_COMPONENTS_" + pathedObject.name
+            
+            if(associatedCollectionName in bpy.data.collections):
+                targetObjectCollection = bpy.data.collections[associatedCollectionName]
+                for hideObject in targetObjectCollection.objects: #select and hide all paths and empties
+                    hideObject.hide_viewport = True
+                    hideObject.hide_render = True
+                    
+        return {'FINISHED'}
+    
+#button to show the paths and empties associated with the selected
+class EMPATHY_OT_ShowCurvesSelected(bpy.types.Operator):
+    bl_idname = "empathy.showcurvesselected"
+    bl_label = "Show curves for selected"
+    bl_description = "Show all empties and curves associated with the selected object"
+
+    def execute(self, context):
+        #currently selected objects that curves will be shown for
+        objectsForPaths = None
+        #for bones
+        isUsingBones = False
+        activeArmature = None
+        if(context.active_object.mode == 'POSE'):
+            isUsingBones = True
+            objectsForPaths = context.selected_pose_bones_from_active_object
+            activeArmature = context.active_object
+        else:
+            objectsForPaths = context.selected_objects
+            
+        #select and show associated objects
+        for pathedObject in objectsForPaths:
+            #for bones
+            associatedCollectionName = None
+            if(isUsingBones):
+                activeArmature = context.active_object
+                associatedCollectionName = "EMPATHY_ARMATURECOMPONENTS_" + activeArmature.name + "_" + pathedObject.name
+            else:
+                associatedCollectionName = "EMPATHY_COMPONENTS_" + pathedObject.name
+            
+            if(associatedCollectionName in bpy.data.collections):
+                targetObjectCollection = bpy.data.collections[associatedCollectionName]
+                for showObject in targetObjectCollection.objects: #select and show all paths and empties
+                    showObject.hide_viewport = False
+                    showObject.hide_render = False
+                    
+        return {'FINISHED'}
+    
 #register and unregister all Empathy classes
 empathyClasses = (  EMPATHY_PT_MenuPanel,
                     EMPATHY_PT_MenuPanelPose,
                     EMPATHY_OT_CreateObjectPaths,
                     EMPATHY_OT_ClearPathsFromSelected,
                     EMPATHY_OT_MarkCurveSplitFrame,
-                    EMPATHY_OT_ClearCurveSplitFrames)
+                    EMPATHY_OT_ClearCurveSplitFrames,
+                    EMPATHY_OT_EditCurvesSelected,
+                    EMPATHY_OT_HideCurvesSelected,
+                    EMPATHY_OT_ShowCurvesSelected)
 
 register, unregister = bpy.utils.register_classes_factory(empathyClasses)
 
