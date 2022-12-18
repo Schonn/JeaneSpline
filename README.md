@@ -129,7 +129,7 @@ See 'Jeane Spline' tab in right-hand menu of 3D viewport when in object mode.
 ----
 
 
-### To change the influence of smoothing effects:
+### To change the influence of delay effects:
 
 -Change the values of 'Delay Position Influence' and 'Smooth Rotation Influence'
 
