@@ -321,6 +321,15 @@ def JSPLINE_removeFromSelected():
                 if("JSPLINE_" in possibleEffectConstraint.name):
                     possibleModifiedObject.constraints.remove(possibleEffectConstraint)
 
+#make sure scene variables exist in scene
+def JSPLINE_setupSceneVariables():
+    #make sure variables exist in scene
+    if(('JSPLINEStopSignal' in bpy.context.scene) == False):
+        bpy.context.scene['JSPLINEStopSignal'] = True
+        bpy.context.scene['JSPLINEProgressFrame'] = bpy.context.scene.frame_start
+        bpy.context.scene['JSPLINEBakeEmpties'] = {}
+        bpy.context.scene['JSPLINEMaxFrameDelay'] = 1
+
 #function to begin modal running
 class JSPLINE_OT_StartBake(bpy.types.Operator):
     bl_idname = "jspline.startbake"
@@ -405,6 +414,8 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
         
     #first setup
     def execute(self, context):
+        #make sure scene variables exist
+        JSPLINE_setupSceneVariables()
         #stop if encountering stop signal
         if(bpy.context.scene['JSPLINEStopSignal'] == True):
             bpy.context.scene['JSPLINEStopSignal'] = False
@@ -470,6 +481,8 @@ class JSPLINE_OT_StopBake(bpy.types.Operator):
     
     #turn on the stop signal switch
     def execute(self, context):
+        #make sure scene variables exist
+        JSPLINE_setupSceneVariables()
         bpy.context.scene['JSPLINEStopSignal'] = True
         return {'FINISHED'}
     
@@ -481,6 +494,8 @@ class JSPLINE_OT_RemoveFromSelected(bpy.types.Operator):
     
     #remove effect
     def execute(self, context):
+        #make sure scene variables exist
+        JSPLINE_setupSceneVariables()
         JSPLINE_removeFromSelected()
         self.report({'INFO'},"Cleared all Jeane Spline effects from selected.")
         return {'FINISHED'}
@@ -494,6 +509,8 @@ class JSPLINE_OT_ApplyPreset(bpy.types.Operator):
    
     #apply preset values
     def execute(self, context):
+        #make sure scene variables exist
+        JSPLINE_setupSceneVariables()
         if(self.presetType == "followthrough"):
             bpy.context.scene.JSPLINERotationNoise = 0
             bpy.context.scene.JSPLINELocationNoise = 0
