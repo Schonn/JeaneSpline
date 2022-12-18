@@ -1,12 +1,17 @@
 Thank you for downloading Jeane Spline 1.0.9 for Blender 3.4.0!
 
 This addon quickly applies space switching effects in object mode to:
+
 -Selected objects
+
 -Selected bones inside of selected armatures
 
 To install:
+
 -Download as zip
+
 -Install zip from Add-Ons section of Blender preferences window
+
 -Make sure add-on is switched on
 
 To access the Jeane Spline menu:
