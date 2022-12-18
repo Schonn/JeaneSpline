@@ -1,4 +1,4 @@
-Thank you for downloading Jeane Spline 1.0.9 for Blender 3.4.0!
+<b>Thank you for downloading Jeane Spline 1.0.9 for Blender 3.4.0!</b>
 
 
 This addon quickly applies space switching effects in object mode to:
