@@ -1,14 +1,14 @@
-<b>Thank you for downloading Jeane Spline 1.0.9 for Blender 3.4.0!</b>
+## Thank you for downloading Jeane Spline 1.0.9 for Blender 3.4.0!
 
-
-This addon quickly applies space switching effects in object mode to:
+### This addon quickly applies space switching effects in object mode to:
 
 -Selected objects
 
 -Selected bones inside of selected armatures
 
+----
 
-To install:
+### To install:
 
 -Download as zip
 
@@ -16,15 +16,17 @@ To install:
 
 -Make sure add-on is switched on
 
+----
 
-To access the Jeane Spline menu:
+### To access the Jeane Spline menu:
 
 See 'Jeane Spline' tab in right-hand menu of 3D viewport when in object mode.
 
+----
 
-Jeane Spline can be applied to bones inside of armatures
+### Jeane Spline can be applied to bones inside of armatures
 
-To apply to an armature:
+### To apply to an armature:
 
 -Select the bones you wish to apply the effect to in pose mode
 
@@ -32,10 +34,11 @@ To apply to an armature:
 
 -Click on 'Start Baking for Selected'
 
+----
 
-Jeane Spline can be applied to objects
+### Jeane Spline can be applied to objects
 
-To apply to an object:
+### To apply to an object:
 
 -Select the bones you wish to apply the effect to in pose mode
 
@@ -45,10 +48,11 @@ To apply to an object:
 
 -Objects will use parent hierarchy to determine delay effect offsets
 
+----
 
-Jeane Spline can be applied to multiple bones in multiple armatures and multiple objects at once
+### Jeane Spline can be applied to multiple bones in multiple armatures and multiple objects at once
 
-To apply to multiple objects and armatures at once:
+### To apply to multiple objects and armatures at once:
 
 -Select the bones in the armatures you wish to apply the effect to in pose mode
 
@@ -56,10 +60,11 @@ To apply to multiple objects and armatures at once:
 
 -Click on 'Start Baking for Selected'
 
+----
 
-Jeane Spline effects can be deleted from multiple objects and bones in armatures at once
+### Jeane Spline effects can be deleted from multiple objects and bones in armatures at once
 
-To delete all empties and constraints from multiple objects and armatures at once:
+### To delete all empties and constraints from multiple objects and armatures at once:
 
 -Select the bones in the armatures you wish to delete the effect from in pose mode
 
@@ -67,24 +72,27 @@ To delete all empties and constraints from multiple objects and armatures at onc
 
 -Click on 'Delete Effect from Selected'
 
+----
 
-The start and end of a baked animation can be wrapped with Jeane Spline
+### The start and end of a baked animation can be wrapped with Jeane Spline
 
-To wrap start and end frames for an animation when baking:
+### To wrap start and end frames for an animation when baking:
 
 -Select 'Wrap Frames for Looped Animation' before clicking 'Start Baking for Selected'
 
+----
 
-Armature bones can be split automatically by Jeane Spline so that position effects work correctly
+### Armature bones can be split automatically by Jeane Spline so that position effects work correctly
 
-To split an armature to allow position effects to work when baking:
+### To split an armature to allow position effects to work when baking:
 
 -Select 'Split Bones for Position Effects' before clicking 'Start Baking for Selected'
 
+----
 
-Effect presets create a starting point for setting suitable effect influences
+### Effect presets create a starting point for setting suitable effect influences
 
-To apply an effect preset:
+### To apply an effect preset:
 
 -Select one of the buttons marked 'Preset:' before clicking 'Start Baking for Selected'
 
@@ -96,8 +104,9 @@ To apply an effect preset:
 
 -'Noisy Smoothing' may work for objects that appear to be hovering
 
+----
 
-To change the amount of noise added when baking space switching effects:
+### To change the amount of noise added when baking space switching effects:
 
 -Change the values of 'Rotation Noise Amount' and 'Location Noise Amount'
 
@@ -105,8 +114,9 @@ To change the amount of noise added when baking space switching effects:
 
 -'Location Noise Amount' greater than 0 causes random position wobbling
 
+----
 
-To change the influence of smoothing effects:
+### To change the influence of smoothing effects:
 
 -Change the values of 'Smooth Position Influence' and 'Smooth Rotation Influence'
 
@@ -116,9 +126,10 @@ To change the influence of smoothing effects:
 
 -Smoothing effects are overwritten by delay effects if delay effects have higher influence
 
+----
 
 
-To change the influence of smoothing effects:
+### To change the influence of smoothing effects:
 
 -Change the values of 'Delay Position Influence' and 'Smooth Rotation Influence'
 
