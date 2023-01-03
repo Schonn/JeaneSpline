@@ -38,10 +38,10 @@ class JSPLINE_PT_SetupPanel(bpy.types.Panel):
     bl_context = 'objectmode'
     bl_category = 'Jeane Spline'
     #inner working variables
-    bpy.context.scene['JSPLINEStopSignal'] = True
-    bpy.context.scene['JSPLINEProgressFrame'] = bpy.context.scene.frame_start
-    bpy.context.scene['JSPLINEBakeEmpties'] = {}
-    bpy.context.scene['JSPLINEMaxFrameDelay'] = 1
+    bpy.types.Scene.JSPLINEStopSignal = bpy.props.BoolProperty(name="Stop Jeane Spline Baking",description="Stop Jeane Spline Baking",default=True)
+    bpy.types.Scene.JSPLINEProgressFrame = bpy.props.IntProperty(name="Jeane Spline Progress Frame",description="Which frame Jeane Spline is up to for baking",default=bpy.context.scene.frame_start)
+    bpy.types.Scene.JSPLINEBakeEmpties = bpy.props.StringProperty(name="Jeane Spline Empties for Baking",description="List of empties used for baking",default="")
+    bpy.types.Scene.JSPLINEMaxFrameDelay = bpy.props.IntProperty(name="Maximum Delay Frames",description="How many frames Jeane Spline needs to keep in memory for delay effects",default=1)
     #user control variables
     bpy.types.Scene.JSPLINERotationNoise = bpy.props.FloatProperty(name="Rotation Noise Amount",description="How much noise to bake into empty rotation",default=0,min=0,max=1)
     bpy.types.Scene.JSPLINELocationNoise = bpy.props.FloatProperty(name="Location Noise Amount",description="How much noise to bake into empty location",default=0,min=0,max=1)
@@ -109,16 +109,16 @@ def JSPLINE_PositionEmptyForCurrentFrame(emptyObject):
     #only store transform history for delay empties
     if(('delay' in emptyObject['JSPLINE_emptyType']) == True):
         #store transform history
-        emptyObject['JSPLINE_locHistory'][str(bpy.context.scene['JSPLINEProgressFrame'])] = emptyObject.location
-        emptyObject['JSPLINE_rotHistory'][str(bpy.context.scene['JSPLINEProgressFrame'])] = emptyObject.rotation_quaternion
+        emptyObject['JSPLINE_locHistory'][str(bpy.context.scene.JSPLINEProgressFrame)] = emptyObject.location
+        emptyObject['JSPLINE_rotHistory'][str(bpy.context.scene.JSPLINEProgressFrame)] = emptyObject.rotation_quaternion
         #keep only needed history for delay, remove old frame transform history which will be unused
-        maxHistoryLength = bpy.context.scene['JSPLINEMaxFrameDelay']+1
+        maxHistoryLength = bpy.context.scene.JSPLINEMaxFrameDelay+1
         if(len(emptyObject['JSPLINE_locHistory']) > maxHistoryLength):
-            emptyObject['JSPLINE_locHistory'].pop(str(bpy.context.scene['JSPLINEProgressFrame']-maxHistoryLength))
-            emptyObject['JSPLINE_rotHistory'].pop(str(bpy.context.scene['JSPLINEProgressFrame']-maxHistoryLength))
+            emptyObject['JSPLINE_locHistory'].pop(str(bpy.context.scene.JSPLINEProgressFrame-maxHistoryLength))
+            emptyObject['JSPLINE_rotHistory'].pop(str(bpy.context.scene.JSPLINEProgressFrame-maxHistoryLength))
     #record last frames if animation is to be looped for any empty
-    if((bpy.context.scene.JSPLINELoopedAnimation == True) and (bpy.context.scene['JSPLINEProgressFrame'] > bpy.context.scene.frame_end - 2)):
-        recordFrameNumber = bpy.context.scene.frame_end-bpy.context.scene['JSPLINEProgressFrame']
+    if((bpy.context.scene.JSPLINELoopedAnimation == True) and (bpy.context.scene.JSPLINEProgressFrame > bpy.context.scene.frame_end - 2)):
+        recordFrameNumber = bpy.context.scene.frame_end-bpy.context.scene.JSPLINEProgressFrame
         emptyObject['JSPLINE_endLocations'][str(recordFrameNumber)] = emptyObject.location
         emptyObject['JSPLINE_endRotations'][str(recordFrameNumber)] = emptyObject.rotation_quaternion
 
@@ -158,11 +158,11 @@ def JSPLINE_AddNoiseToEmpty(emptyObject):
 def JSPLINE_DelayEmpty(emptyObject):
     canApplyDelay = False
     #only apply delay if the required delay is smaller than the currently elapsed frames
-    if(emptyObject['JSPLINE_framedelay'] < (bpy.context.scene['JSPLINEProgressFrame'] - bpy.context.scene.frame_start)):
+    if(emptyObject['JSPLINE_framedelay'] < (bpy.context.scene.JSPLINEProgressFrame - bpy.context.scene.frame_start)):
         print("apply delay for " + emptyObject.name)
         canApplyDelay = True
-        historyFrameNumber = bpy.context.scene['JSPLINEProgressFrame']-emptyObject['JSPLINE_framedelay']
-        #print("applying frame " + str(historyFrameNumber) + " at frame " + str(bpy.context.scene['JSPLINEProgressFrame']) + " for delay " + str(emptyObject['JSPLINE_framedelay']))
+        historyFrameNumber = bpy.context.scene.JSPLINEProgressFrame-emptyObject['JSPLINE_framedelay']
+        #print("applying frame " + str(historyFrameNumber) + " at frame " + str(bpy.context.scene.JSPLINEProgressFrame) + " for delay " + str(emptyObject['JSPLINE_framedelay']))
         emptyObject.location = emptyObject['JSPLINE_locHistory'][str(historyFrameNumber)]
         emptyObject.rotation_quaternion = emptyObject['JSPLINE_rotHistory'][str(historyFrameNumber)]
     return canApplyDelay
@@ -237,8 +237,8 @@ def JSPLINE_CreateEmptySet(selectedObject,selectedBoneName):
                             remainingSelectedChain = True
                             parentObject = parentObject.parent
             #set max frame delay that Jeane Spline will need to keep history for to do this delay
-            if(delayFrameNumber > bpy.context.scene['JSPLINEMaxFrameDelay']):
-                bpy.context.scene['JSPLINEMaxFrameDelay'] = delayFrameNumber
+            if(delayFrameNumber > bpy.context.scene.JSPLINEMaxFrameDelay):
+                bpy.context.scene.JSPLINEMaxFrameDelay = delayFrameNumber
             #store frame delay in empty
             emptyArray[emptyNumber]['JSPLINE_framedelay'] = delayFrameNumber
         #set up clear end frame transform record if animation is to be looped
@@ -247,7 +247,7 @@ def JSPLINE_CreateEmptySet(selectedObject,selectedBoneName):
         #clear any existing empty animation before new bake
         emptyArray[emptyNumber].animation_data_clear()
         #store empty to be baked
-        bpy.context.scene['JSPLINEBakeEmpties'][emptyArray[emptyNumber].name] = emptyArray[emptyNumber]
+        bpy.context.scene.JSPLINEBakeEmpties = bpy.context.scene.JSPLINEBakeEmpties + emptyArray[emptyNumber].name + ","
         #set to use quaternion rotation
         emptyArray[emptyNumber].rotation_mode = 'QUATERNION'
         #position empty for frame
@@ -324,11 +324,11 @@ def JSPLINE_removeFromSelected():
 #make sure scene variables exist in scene
 def JSPLINE_setupSceneVariables():
     #make sure variables exist in scene
-    if(('JSPLINEStopSignal' in bpy.context.scene) == False):
-        bpy.context.scene['JSPLINEStopSignal'] = True
-        bpy.context.scene['JSPLINEProgressFrame'] = bpy.context.scene.frame_start
-        bpy.context.scene['JSPLINEBakeEmpties'] = {}
-        bpy.context.scene['JSPLINEMaxFrameDelay'] = 1
+    if(('bpy.context.scene.JSPLINEStopSignal' in bpy.context.scene) == False):
+        bpy.context.scene.JSPLINEStopSignal = True
+        bpy.context.scene.JSPLINEProgressFrame = bpy.context.scene.frame_start
+        bpy.context.scene.JSPLINEBakeEmpties = ""
+        bpy.context.scene.JSPLINEMaxFrameDelay = 1
 
 #function to begin modal running
 class JSPLINE_OT_StartBake(bpy.types.Operator):
@@ -341,21 +341,22 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
     
     #repeated while running
     def modal(self, context, event):
+        bakeEmptyNamesList = bpy.context.scene.JSPLINEBakeEmpties.split(',')
         #stop modal timer if the stop signal is activated
-        if(bpy.context.scene['JSPLINEStopSignal'] == True):
+        if(bpy.context.scene.JSPLINEStopSignal == True):
             context.window_manager.event_timer_remove(self.JSPLINETimer)
             #enable all constraints
-            for bakedEmptyName in list(bpy.context.scene['JSPLINEBakeEmpties']):
-                bakedEmpty = bpy.context.scene['JSPLINEBakeEmpties'][bakedEmptyName]
+            for bakedEmptyName in bakeEmptyNamesList:
+                bakedEmpty = bpy.context.scene.objects[bakedEmptyName]
                 JSPLINE_enableAnimatedObjectConstraints(bakedEmpty)
             self.report({'INFO'},"Jeane Spline baking stopped.")
             return {'CANCELLED'}
         else: 
             #step through frames in scene
-            if(bpy.context.scene['JSPLINEProgressFrame'] <= bpy.context.scene.frame_end):
+            if(bpy.context.scene.JSPLINEProgressFrame <= bpy.context.scene.frame_end):
                 #record keyframe for each empty to be baked
-                for bakingEmptyName in list(bpy.context.scene['JSPLINEBakeEmpties']):
-                    bakingEmpty = bpy.context.scene['JSPLINEBakeEmpties'][bakingEmptyName]
+                for bakingEmptyName in bakeEmptyNamesList:
+                    bakingEmpty = bpy.context.scene.objects[bakingEmptyName]
                     JSPLINE_PositionEmptyForCurrentFrame(bakingEmpty)
                     canRecordKeyFrame = True
                     locationRecordInterval = 3
@@ -372,34 +373,34 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
                     JSPLINE_AddNoiseToEmpty(bakingEmpty)
                     #don't record a keyframe if looped is enabled and it's close to the end of the animation
                     if(bpy.context.scene.JSPLINELoopedAnimation == True):
-                        if(bpy.context.scene['JSPLINEProgressFrame'] > bpy.context.scene.frame_end - 4):
+                        if(bpy.context.scene.JSPLINEProgressFrame > bpy.context.scene.frame_end - 4):
                             canRecordKeyFrame = False
                     #don't record keyframe if not appropriate
                     if(canRecordKeyFrame == True):
                         #keyframe in intervals for smoothing
-                        if(bpy.context.scene['JSPLINEProgressFrame'] % locationRecordInterval == 0):
+                        if(bpy.context.scene.JSPLINEProgressFrame % locationRecordInterval == 0):
                             bakingEmpty.keyframe_insert("location")
-                        if(bpy.context.scene['JSPLINEProgressFrame'] % rotationRecordInterval == 0):
+                        if(bpy.context.scene.JSPLINEProgressFrame % rotationRecordInterval == 0):
                             bakingEmpty.keyframe_insert("rotation_quaternion")
                     #prepare last frame for wrap-around if looping animation is selected
-                    if((bpy.context.scene.JSPLINELoopedAnimation == True) and (bpy.context.scene['JSPLINEProgressFrame'] == bpy.context.scene.frame_end)):
+                    if((bpy.context.scene.JSPLINELoopedAnimation == True) and (bpy.context.scene.JSPLINEProgressFrame == bpy.context.scene.frame_end)):
                         bakingEmpty.location = bakingEmpty['JSPLINE_endLocations']['0']
                         bakingEmpty.rotation_quaternion = bakingEmpty['JSPLINE_endRotations']['0']
                         bakingEmpty.keyframe_insert("location")
                         bakingEmpty.keyframe_insert("rotation_quaternion")
-                bpy.context.scene['JSPLINEProgressFrame'] += 1
-                bpy.context.scene.frame_set(bpy.context.scene['JSPLINEProgressFrame'])
+                bpy.context.scene.JSPLINEProgressFrame += 1
+                bpy.context.scene.frame_set(bpy.context.scene.JSPLINEProgressFrame)
                 return {'PASS_THROUGH'}
             else:
                 #stop baking when last frame reached
                 context.window_manager.event_timer_remove(self.JSPLINETimer)
-                bpy.context.scene['JSPLINEStopSignal'] = True
+                bpy.context.scene.JSPLINEStopSignal = True
                 #return to frame 1 for wrapping changes if loop is enabled
                 if(bpy.context.scene.JSPLINELoopedAnimation == True):
                     bpy.context.scene.frame_set(bpy.context.scene.frame_start)
                 #iterate all empties for final changes
-                for bakedEmptyName in list(bpy.context.scene['JSPLINEBakeEmpties']):
-                    bakedEmpty = bpy.context.scene['JSPLINEBakeEmpties'][bakedEmptyName]
+                for bakedEmptyName in bakeEmptyNamesList:
+                    bakedEmpty = bpy.context.scene.objects[bakedEmptyName]
                     #wrap animation for empty if looping animation is selected
                     if(bpy.context.scene.JSPLINELoopedAnimation == True):
                         bakedEmpty.location = bakedEmpty['JSPLINE_endLocations']['1']
@@ -417,8 +418,8 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
         #make sure scene variables exist
         JSPLINE_setupSceneVariables()
         #stop if encountering stop signal
-        if(bpy.context.scene['JSPLINEStopSignal'] == True):
-            bpy.context.scene['JSPLINEStopSignal'] = False
+        if(bpy.context.scene.JSPLINEStopSignal == True):
+            bpy.context.scene.JSPLINEStopSignal = False
             
             #cancelling currently playing animation seems only possible with an operator
             bpy.ops.screen.animation_cancel()
@@ -426,10 +427,10 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
             JSPLINE_removeFromSelected()
             #set frame to start, ready to begin stepping through all frames
             bpy.context.scene.frame_set(bpy.context.scene.frame_start)
-            bpy.context.scene['JSPLINEProgressFrame'] = bpy.context.scene.frame_start
+            bpy.context.scene.JSPLINEProgressFrame = bpy.context.scene.frame_start
             
-            #new bake empties dictionary for new bake
-            bpy.context.scene['JSPLINEBakeEmpties'] = {}
+            #new bake empties string list for new bake
+            bpy.context.scene.JSPLINEBakeEmpties = ""
             
             
             #make sure collection exists to put empties
@@ -461,6 +462,10 @@ class JSPLINE_OT_StartBake(bpy.types.Operator):
                     emptyArray = JSPLINE_CreateEmptySet(possibleBakeObject,None)
                     #create object constraints
                     JSPLINE_createAnimatedObjectConstraints(possibleBakeObject,emptyArray)
+            #remove last comma in bake empties comma string
+            if(bpy.context.scene.JSPLINEBakeEmpties[-1:] == ','):
+                bpy.context.scene.JSPLINEBakeEmpties = bpy.context.scene.JSPLINEBakeEmpties[:-1]
+                
             self.report({'INFO'},"Started baking space-switch delay effect for selected with Jeane Spline.")
             
             #set up timer and handler last, errors generated in execute may cause a crash otherwise  
@@ -483,7 +488,7 @@ class JSPLINE_OT_StopBake(bpy.types.Operator):
     def execute(self, context):
         #make sure scene variables exist
         JSPLINE_setupSceneVariables()
-        bpy.context.scene['JSPLINEStopSignal'] = True
+        bpy.context.scene.JSPLINEStopSignal = True
         return {'FINISHED'}
     
 #function to remove Jeane Spline effects from selected
