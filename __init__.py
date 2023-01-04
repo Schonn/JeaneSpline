@@ -39,7 +39,7 @@ class JSPLINE_PT_SetupPanel(bpy.types.Panel):
     bl_category = 'Jeane Spline'
     #inner working variables
     bpy.types.Scene.JSPLINEStopSignal = bpy.props.BoolProperty(name="Stop Jeane Spline Baking",description="Stop Jeane Spline Baking",default=True)
-    bpy.types.Scene.JSPLINEProgressFrame = bpy.props.IntProperty(name="Jeane Spline Progress Frame",description="Which frame Jeane Spline is up to for baking",default=bpy.context.scene.frame_start)
+    bpy.types.Scene.JSPLINEProgressFrame = bpy.props.IntProperty(name="Jeane Spline Progress Frame",description="Which frame Jeane Spline is up to for baking",default=0)
     bpy.types.Scene.JSPLINEBakeEmpties = bpy.props.StringProperty(name="Jeane Spline Empties for Baking",description="List of empties used for baking",default="")
     bpy.types.Scene.JSPLINEMaxFrameDelay = bpy.props.IntProperty(name="Maximum Delay Frames",description="How many frames Jeane Spline needs to keep in memory for delay effects",default=1)
     #user control variables
@@ -323,12 +323,11 @@ def JSPLINE_removeFromSelected():
 
 #make sure scene variables exist in scene
 def JSPLINE_setupSceneVariables():
-    #make sure variables exist in scene
-    if(('bpy.context.scene.JSPLINEStopSignal' in bpy.context.scene) == False):
-        bpy.context.scene.JSPLINEStopSignal = True
-        bpy.context.scene.JSPLINEProgressFrame = bpy.context.scene.frame_start
-        bpy.context.scene.JSPLINEBakeEmpties = ""
-        bpy.context.scene.JSPLINEMaxFrameDelay = 1
+    #make sure variables are up to date in scene
+    bpy.context.scene.JSPLINEStopSignal = True
+    bpy.context.scene.JSPLINEProgressFrame = bpy.context.scene.frame_start
+    bpy.context.scene.JSPLINEBakeEmpties = ""
+    bpy.context.scene.JSPLINEMaxFrameDelay = 1
 
 #function to begin modal running
 class JSPLINE_OT_StartBake(bpy.types.Operator):
